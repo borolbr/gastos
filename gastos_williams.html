@@ -269,9 +269,7 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'S
 </div>
 
 <script>
-const SHEET_ID = '19KeXwmAr8mXH6JhDLLSAc_uZyqXlTMvTVOwGYoZkePo';
-const API_KEY  = 'AIzaSyDYiuSpBt04ZcoeWY9LBECci2AEkdtutEM';
-const SHEET_RANGE = 'Gastos!A:G';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyxcCksWGSOUJTYuYENNJakKwlOMlLo58X76fv5_gCfCK_FbttDphb8hfL3EYjExvr2/exec';
 
 const CAT_ICONS = {
   'Supermercado':'ti-shopping-cart','Farmacia':'ti-pill','Salida':'ti-fork-knife',
@@ -351,22 +349,18 @@ async function guardarGasto() {
   document.getElementById('form-view').style.display = 'none';
   document.getElementById('success-view').classList.add('visible');
 
-  // Sincronizar con Sheets
+  // Sincronizar con Sheets via Apps Script
   setSyncDot('syncing');
   try {
-    const row = [fecha, quien, monto, cat, medioSel, cruzable ? 'Sí' : 'No (efectivo)', nota];
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}:append?valueInputOption=USER_ENTERED&key=${API_KEY}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [row] })
-    });
-    if (res.ok) {
+    const params = new URLSearchParams({ fecha, quien, monto, cat, medio: medioSel, cruzable: cruzable ? 'Sí' : 'No (efectivo)', nota: nota || '' });
+    const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET', redirect: 'follow' });
+    const json = await res.json();
+    if (json.status === 'ok') {
       setSyncDot('ok');
       document.getElementById('s-sync').className = 'sync-status ok';
       document.getElementById('s-sync').textContent = '✓ Guardado en Google Sheets';
     } else {
-      throw new Error('HTTP ' + res.status);
+      throw new Error('error');
     }
   } catch(e) {
     setSyncDot('err');
@@ -419,8 +413,7 @@ function cargarHistorial() {
 // Verificar conexión al abrir
 (async () => {
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?key=${API_KEY}&fields=spreadsheetId`;
-    const res = await fetch(url);
+    const res = await fetch(APPS_SCRIPT_URL + '?ping=1', { redirect: 'follow' });
     setSyncDot(res.ok ? 'ok' : 'err');
   } catch(e) { setSyncDot('err'); }
 })();
