@@ -450,12 +450,29 @@ function nuevoGasto(){
 }
 
 // ── Historial ──────────────────────────────────────────────────────────────
-function renderHistorial(){
-  const local=getLocal('gastos_bw',[]);
-  if(!local.length){ document.getElementById('hist-list').innerHTML='<div class="loading-msg">Sin gastos cargados aún.</div>'; document.getElementById('hist-total').textContent=''; return; }
-  const total=local.reduce((s,g)=>s+g.monto,0);
+async function renderHistorial(){
+  document.getElementById('hist-list').innerHTML='<div class="loading-msg"><i class="ti ti-loader" style="animation:pulse 1s infinite"></i> Cargando...</div>';
+  document.getElementById('hist-total').textContent='';
+
+  let gastos=[];
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
+    const json=await res.json();
+    if(json.status==='ok'&&json.rows) gastos=json.rows;
+  }catch(e){
+    gastos=getLocal('gastos_bw',[]);
+  }
+
+  // Ordenar por fecha desc
+  gastos.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+
+  if(!gastos.length){
+    document.getElementById('hist-list').innerHTML='<div class="loading-msg">Sin gastos cargados aún.</div>';
+    return;
+  }
+  const total=gastos.reduce((s,g)=>s+(Number(g.monto)||0),0);
   document.getElementById('hist-total').textContent=fmt(total);
-  document.getElementById('hist-list').innerHTML=local.slice(0,30).map(g=>{
+  document.getElementById('hist-list').innerHTML=gastos.slice(0,50).map(g=>{
     const icon=CAT_ICONS[g.cat]||'ti-receipt';
     const ef=g.medio==='Efectivo';
     return `<div class="hist-item">
@@ -464,7 +481,7 @@ function renderHistorial(){
         <div class="hist-desc">${g.cat}${g.nota?' · '+g.nota:''}</div>
         <div class="hist-meta">${g.quien} · ${g.fecha}<span class="hist-pill ${ef?'ef':''}">${g.medio||'Efectivo'}</span></div>
       </div>
-      <div class="hist-monto">${fmt(g.monto)}</div>
+      <div class="hist-monto">${fmt(Number(g.monto)||0)}</div>
     </div>`;
   }).join('');
 }
