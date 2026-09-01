@@ -518,6 +518,14 @@ async function renderPresupuesto(){
   document.getElementById('pres-mes-label').textContent=MESES[presMes]+' '+presAnio;
   document.getElementById('pres-bars').innerHTML='<div class="loading-msg"><i class="ti ti-loader" style="animation:pulse 1s infinite"></i> Cargando...</div>';
 
+  // Cargar presupuestos del Sheet (compartidos)
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+'?leer_presup=1',{redirect:'follow'});
+    const json=await res.json();
+    if(json.status==='ok'&&json.presupuestos&&Object.keys(json.presupuestos).length>0){
+      setLocal('presupuestos',json.presupuestos);
+    }
+  }catch(e){}
   const presupuestos=getLocal('presupuestos',{}); // {cat: monto, __total__: monto}
   const totalLimit=presupuestos['__total__']||0;
   const mesStr=String(presAnio)+'-'+String(presMes+1).padStart(2,'0');
@@ -598,7 +606,15 @@ async function renderPresupuesto(){
 }
 
 // ── Modal presupuesto ──────────────────────────────────────────────────────
-function abrirModalPresupuesto(){
+async function abrirModalPresupuesto(){
+  // Intentar cargar del Sheet primero
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+'?leer_presup=1',{redirect:'follow'});
+    const json=await res.json();
+    if(json.status==='ok'&&json.presupuestos&&Object.keys(json.presupuestos).length>0){
+      setLocal('presupuestos',json.presupuestos);
+    }
+  }catch(e){}
   const presupuestos=getLocal('presupuestos',{});
   const totalVal=presupuestos['__total__']||'';
   let html=`<div class="presup-input-row" style="background:var(--accent-bg);margin:-12px -12px 8px;padding:12px;border-radius:var(--radius-sm) var(--radius-sm) 0 0">
@@ -621,7 +637,7 @@ function abrirModalPresupuesto(){
 function cerrarModal(){ document.getElementById('modal-overlay').classList.remove('visible'); }
 function cerrarModalSiOverlay(e){ if(e.target===document.getElementById('modal-overlay')) cerrarModal(); }
 
-function guardarPresupuestos(){
+async function guardarPresupuestos(){
   const presupuestos={};
   document.querySelectorAll('.presup-input').forEach(inp=>{
     const v=parseFloat(inp.value);
@@ -629,6 +645,14 @@ function guardarPresupuestos(){
   });
   setLocal('presupuestos',presupuestos);
   cerrarModal();
+
+  // Guardar en Sheet para compartir con Flor
+  try{
+    const data=Object.entries(presupuestos).map(([cat,monto])=>({cat,monto}));
+    const params=new URLSearchParams({guardar_presup:JSON.stringify(data)});
+    await fetch(APPS_SCRIPT_URL+'?'+params.toString(),{redirect:'follow'});
+  }catch(e){}
+
   renderPresupuesto();
 }
 
