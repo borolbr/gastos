@@ -477,15 +477,26 @@ function cambiarMes(d){
   renderPresupuesto();
 }
 
-function renderPresupuesto(){
+async function renderPresupuesto(){
   document.getElementById('pres-mes-label').textContent=MESES[presMes]+' '+presAnio;
+  document.getElementById('pres-bars').innerHTML='<div class="loading-msg"><i class="ti ti-loader" style="animation:pulse 1s infinite"></i> Cargando...</div>';
 
   const presupuestos=getLocal('presupuestos',{});
-  const local=getLocal('gastos_bw',[]);
-
-  // Filtrar gastos del mes seleccionado
   const mesStr=String(presAnio)+'-'+String(presMes+1).padStart(2,'0');
-  const gastosMes=local.filter(g=>g.fecha&&g.fecha.startsWith(mesStr));
+
+  // Leer del Sheet (gastos de los dos)
+  let gastosMes=[];
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
+    const json=await res.json();
+    if(json.status==='ok'&&json.rows){
+      gastosMes=json.rows.filter(g=>g.fecha&&String(g.fecha).startsWith(mesStr));
+    }
+  }catch(e){
+    // fallback local si no hay conexion
+    const local=getLocal('gastos_bw',[]);
+    gastosMes=local.filter(g=>g.fecha&&g.fecha.startsWith(mesStr));
+  }
 
   // Totales por cat
   const totCat={};
