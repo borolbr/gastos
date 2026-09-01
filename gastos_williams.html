@@ -117,6 +117,17 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
 .otro-btn{padding:13px 32px;border-radius:var(--radius);border:.5px solid var(--border-strong);background:var(--surface);font-size:15px;font-weight:500;color:var(--text);cursor:pointer;margin-top:4px}
 
 /* ── Presupuesto ── */
+.presup-total-card{background:var(--accent-bg);border-radius:var(--radius);padding:16px 15px;border:.5px solid rgba(26,110,245,.15)}
+.presup-total-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.presup-total-label{font-size:11px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.presup-total-gastado{font-size:28px;font-weight:700;color:var(--accent);letter-spacing:-1px;line-height:1}
+.presup-total-limite{font-size:12px;color:var(--accent-text);opacity:.7}
+.bar-track-big{height:10px;background:rgba(26,110,245,.15);border-radius:5px;overflow:visible;margin-top:4px}
+.bar-fill-big{height:100%;border-radius:5px;transition:width .5s ease;max-width:none;position:relative}
+.bar-fill-big.ok{background:var(--green)}
+.bar-fill-big.warn{background:var(--orange)}
+.bar-fill-big.over{background:var(--red);border-radius:5px}
+
 .mes-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
 .mes-label{font-size:15px;font-weight:600;color:var(--text)}
 .mes-nav{display:flex;gap:4px}
@@ -281,23 +292,31 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
       </div>
     </div>
 
-    <div class="presup-total" id="pres-total-card">
-      <div>
-        <div class="presup-total-label">Total del mes</div>
-        <div style="font-size:12px;color:var(--accent-text);margin-top:2px" id="pres-total-pct"></div>
+    <!-- Barra total general -->
+    <div class="presup-total-card" id="pres-total-card">
+      <div class="presup-total-top">
+        <div>
+          <div class="presup-total-label">Presupuesto total del mes</div>
+          <div class="presup-total-gastado" id="pres-total-gastado">$0</div>
+        </div>
+        <div style="text-align:right">
+          <div id="pres-total-pct-label" style="font-size:13px;font-weight:700;margin-bottom:2px"></div>
+          <div class="presup-total-limite" id="pres-total-limite">sin presupuesto</div>
+          <div id="pres-total-quedan" style="font-size:12px;margin-top:2px;color:var(--accent-text)"></div>
+        </div>
       </div>
-      <div class="presup-total-nums">
-        <div class="presup-total-gastado" id="pres-total-gastado">$0</div>
-        <div class="presup-total-limite" id="pres-total-limite">de $0 presupuestado</div>
+      <div class="bar-track-big" id="pres-total-track" style="display:none">
+        <div class="bar-fill-big" id="pres-total-bar"></div>
       </div>
     </div>
 
+    <!-- Barras por categoría -->
     <div class="presup-bar-card" id="pres-bars">
       <div class="loading-msg"><i class="ti ti-loader" style="animation:pulse 1s infinite"></i> Cargando...</div>
     </div>
 
     <button class="edit-presup-btn" onclick="abrirModalPresupuesto()">
-      <i class="ti ti-settings"></i> Editar presupuestos por categoría
+      <i class="ti ti-settings"></i> Editar presupuestos
     </button>
 
   </div><!-- /view-presupuesto -->
@@ -499,7 +518,8 @@ async function renderPresupuesto(){
   document.getElementById('pres-mes-label').textContent=MESES[presMes]+' '+presAnio;
   document.getElementById('pres-bars').innerHTML='<div class="loading-msg"><i class="ti ti-loader" style="animation:pulse 1s infinite"></i> Cargando...</div>';
 
-  const presupuestos=getLocal('presupuestos',{});
+  const presupuestos=getLocal('presupuestos',{}); // {cat: monto, __total__: monto}
+  const totalLimit=presupuestos['__total__']||0;
   const mesStr=String(presAnio)+'-'+String(presMes+1).padStart(2,'0');
 
   // Leer del Sheet (gastos de los dos)
@@ -511,52 +531,66 @@ async function renderPresupuesto(){
       gastosMes=json.rows.filter(g=>g.fecha&&String(g.fecha).startsWith(mesStr));
     }
   }catch(e){
-    // fallback local si no hay conexion
     const local=getLocal('gastos_bw',[]);
     gastosMes=local.filter(g=>g.fecha&&g.fecha.startsWith(mesStr));
   }
 
   // Totales por cat
   const totCat={};
-  gastosMes.forEach(g=>{ totCat[g.cat]=(totCat[g.cat]||0)+g.monto; });
-
+  gastosMes.forEach(g=>{ totCat[g.cat]=(totCat[g.cat]||0)+Number(g.monto||0); });
   const totalGastado=Object.values(totCat).reduce((s,v)=>s+v,0);
-  const totalPresup=Object.values(presupuestos).reduce((s,v)=>s+v,0);
 
+  // ── Barra total ────────────────────────────────────────────────────────
+  const card=document.getElementById('pres-total-card');
   document.getElementById('pres-total-gastado').textContent=fmt(totalGastado);
-  document.getElementById('pres-total-limite').textContent=totalPresup>0?'de '+fmt(totalPresup)+' presupuestado':'(sin presupuesto total)';
 
-  if(totalPresup>0){
-    const pct=Math.min(100,Math.round(totalGastado/totalPresup*100));
-    document.getElementById('pres-total-pct').textContent=pct+'% utilizado';
-    document.getElementById('pres-total-card').style.background=pct>=100?'#fdecea':pct>=80?'#fff3e0':'var(--accent-bg)';
-    document.getElementById('pres-total-card').style.color=pct>=100?'var(--red)':pct>=80?'var(--orange)':'';
+  if(totalLimit>0){
+    const pct=Math.round(totalGastado/totalLimit*100);
+    const pctCapped=Math.min(100,pct);
+    const barClass=pct>=100?'over':pct>=80?'warn':'ok';
+    const quedan=totalLimit-totalGastado;
+
+    document.getElementById('pres-total-pct-label').textContent=pct+'%';
+    document.getElementById('pres-total-pct-label').style.color=pct>=100?'var(--red)':pct>=80?'var(--orange)':'var(--green)';
+    document.getElementById('pres-total-limite').textContent='de '+fmt(totalLimit)+' presupuestado';
+    document.getElementById('pres-total-quedan').textContent=quedan>=0?'Quedan '+fmt(quedan):'Excedido '+fmt(Math.abs(quedan));
+    document.getElementById('pres-total-quedan').style.color=quedan<0?'var(--red)':quedan<totalLimit*.2?'var(--orange)':'var(--green)';
+    document.getElementById('pres-total-track').style.display='block';
+    const bar=document.getElementById('pres-total-bar');
+    bar.style.width=pctCapped+'%';
+    bar.className='bar-fill-big '+barClass;
+    card.style.background=pct>=100?'#fdecea':pct>=80?'#fff3e0':'var(--accent-bg)';
   } else {
-    document.getElementById('pres-total-pct').textContent='';
+    document.getElementById('pres-total-pct-label').textContent='';
+    document.getElementById('pres-total-limite').textContent='sin presupuesto total';
+    document.getElementById('pres-total-quedan').textContent='';
+    document.getElementById('pres-total-track').style.display='none';
+    card.style.background='var(--accent-bg)';
   }
 
-  // Todas las cats con gasto o presupuesto
-  const allCats=new Set([...CATS,...Object.keys(totCat),...Object.keys(presupuestos)]);
-
+  // ── Barras por categoría ───────────────────────────────────────────────
+  const allCats=new Set([...CATS,...Object.keys(totCat),...Object.keys(presupuestos).filter(k=>k!=='__total__')]);
   let html='';
   [...allCats].forEach(cat=>{
     const gastado=totCat[cat]||0;
     const limite=presupuestos[cat]||0;
+    if(limite===0&&gastado===0) return;
     const icon=CAT_ICONS[cat]||'ti-tag';
-    const pct=limite>0?Math.min(100,Math.round(gastado/limite*100)):0;
+    // Allow bar to go over 100%
+    const pct=limite>0?Math.round(gastado/limite*100):0;
+    const pctDisplay=Math.min(pct,100); // visual cap for bar width
     const barClass=pct>=100?'over':pct>=80?'warn':'ok';
-    const noPresup=limite===0&&gastado===0;
-    if(noPresup) return; // no mostrar cats sin actividad ni presupuesto
+    const overLabel=pct>100?` <span style="color:var(--red);font-size:10px;font-weight:600">${pct}%</span>`:'';
 
     html+=`<div class="presup-cat-row${limite===0?' no-presup':''}">
       <div class="presup-cat-top">
         <div class="presup-cat-name"><i class="ti ${icon}"></i>${cat}</div>
         <div class="presup-cat-nums">
           <span class="presup-cat-gastado">${fmt(gastado)}</span>
-          ${limite>0?` <span style="color:var(--text3)">/ ${fmt(limite)}</span>`:'<span style="color:var(--text3)"> (sin límite)</span>'}
+          ${limite>0?` <span style="color:var(--text3)">/ ${fmt(limite)}</span>${overLabel}`:'<span style="color:var(--text3)"> (sin límite)</span>'}
         </div>
       </div>
-      ${limite>0?`<div class="bar-track"><div class="bar-fill ${barClass}" style="width:${pct}%"></div></div>`:''}
+      ${limite>0?`<div class="bar-track"><div class="bar-fill ${barClass}" style="width:${pctDisplay}%"></div></div>`:''}
     </div>`;
   });
 
@@ -566,7 +600,12 @@ async function renderPresupuesto(){
 // ── Modal presupuesto ──────────────────────────────────────────────────────
 function abrirModalPresupuesto(){
   const presupuestos=getLocal('presupuestos',{});
-  let html='';
+  const totalVal=presupuestos['__total__']||'';
+  let html=`<div class="presup-input-row" style="background:var(--accent-bg);margin:-12px -12px 8px;padding:12px;border-radius:var(--radius-sm) var(--radius-sm) 0 0">
+    <div class="presup-input-label" style="font-weight:700;color:var(--accent-text)"><i class="ti ti-target" style="color:var(--accent)"></i>PRESUPUESTO TOTAL</div>
+    <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="__total__" value="${totalVal}" style="border-color:var(--accent)">
+  </div>
+  <div style="font-size:11px;color:var(--text3);padding:4px 0 10px;border-bottom:.5px solid var(--border);margin-bottom:8px">Los siguientes son límites orientativos por categoría</div>`;
   CATS.forEach(cat=>{
     const icon=CAT_ICONS[cat]||'ti-tag';
     const val=presupuestos[cat]||'';
