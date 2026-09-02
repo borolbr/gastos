@@ -494,24 +494,37 @@ async function renderHistorial(){
   document.getElementById('hist-total').textContent='';
 
   let gastos=[];
+  // Mostrar cache al instante
+  const cached=getLocal('gastos_bw',[]);
+  if(cached.length) renderHistList(cached);
+
+  // Actualizar del Sheet en background
   try{
     const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
     const json=await res.json();
-    if(json.status==='ok'&&json.rows) gastos=json.rows;
+    if(json.status==='ok'&&json.rows){
+      gastos=json.rows;
+      setLocal('gastos_bw',gastos);
+    }
   }catch(e){
-    gastos=getLocal('gastos_bw',[]);
+    gastos=cached;
   }
-
-  // Ordenar por fecha desc
-  gastos.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
 
   if(!gastos.length){
     document.getElementById('hist-list').innerHTML='<div class="loading-msg">Sin gastos cargados aún.</div>';
     return;
   }
-  const total=gastos.reduce((s,g)=>s+(Number(g.monto)||0),0);
+
+  // Ordenar por fecha desc
+  gastos.sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  renderHistList(gastos);
+}
+
+function renderHistList(gastos){
+  const sorted=[...gastos].sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const total=sorted.reduce((s,g)=>s+(Number(g.monto)||0),0);
   document.getElementById('hist-total').textContent=fmt(total);
-  document.getElementById('hist-list').innerHTML=gastos.slice(0,50).map(g=>{
+  document.getElementById('hist-list').innerHTML=sorted.slice(0,50).map(g=>{
     const icon=CAT_ICONS[g.cat]||'ti-receipt';
     const ef=g.medio==='Efectivo';
     return `<div class="hist-item">
@@ -551,17 +564,21 @@ async function renderPresupuesto(){
   const limitTarj=presupuestos['__total_tarj__']||0;
   const mesStr=String(presAnio)+'-'+String(presMes+1).padStart(2,'0');
 
-  // Leer del Sheet (gastos de los dos)
-  let gastosMes=[];
+  // Mostrar cache inmediatamente
+  const cacheKey='gastos_mes_'+mesStr;
+  const cachedMes=getLocal(cacheKey,[]);
+  let gastosMes=cachedMes;
+
+  // Actualizar del Sheet en background (solo el mes)
   try{
-    const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
+    const res=await fetch(APPS_SCRIPT_URL+'?leer=1&mes='+mesStr,{redirect:'follow'});
     const json=await res.json();
     if(json.status==='ok'&&json.rows){
-      gastosMes=json.rows.filter(g=>g.fecha&&String(g.fecha).startsWith(mesStr));
+      gastosMes=json.rows;
+      setLocal(cacheKey,gastosMes);
     }
   }catch(e){
-    const local=getLocal('gastos_bw',[]);
-    gastosMes=local.filter(g=>g.fecha&&g.fecha.startsWith(mesStr));
+    // usa cache
   }
 
   // Separar por medio
@@ -701,10 +718,18 @@ async function guardarPresupuestos(){
 document.getElementById('fecha').value=today();
 updateHeaderSub();
 
+// Al arrancar: verificar conexion y cargar presupuesto del mes actual
 (async()=>{
+  const mesKey=String(new Date().getFullYear())+'-'+String(new Date().getMonth()+1).padStart(2,'0');
   try{
-    const res=await fetch(APPS_SCRIPT_URL+'?ping=1',{redirect:'follow'});
-    setSyncDot(res.ok?'ok':'err');
+    // Verificar conexion
+    const res=await fetch(APPS_SCRIPT_URL+'?leer_presup=1&mes='+mesKey,{redirect:'follow'});
+    const json=await res.json();
+    setSyncDot('ok');
+    // Si hay presupuesto en el Sheet, guardarlo local
+    if(json.status==='ok'&&json.presupuestos&&Object.keys(json.presupuestos).length>0){
+      setLocal('presup_'+mesKey, json.presupuestos);
+    }
   }catch(e){ setSyncDot('err'); }
 })();
 </script>
