@@ -569,13 +569,19 @@ async function renderPresupuesto(){
   const cachedMes=getLocal(cacheKey,[]);
   let gastosMes=cachedMes;
 
-  // Actualizar del Sheet en background (solo el mes)
+  // Actualizar del Sheet en background
   try{
-    const res=await fetch(APPS_SCRIPT_URL+'?leer=1&mes='+mesStr,{redirect:'follow'});
+    const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
     const json=await res.json();
     if(json.status==='ok'&&json.rows){
-      gastosMes=json.rows;
-      setLocal(cacheKey,gastosMes);
+      // Guardar todos en cache general
+      setLocal('gastos_bw', json.rows);
+      // Filtrar para este mes
+      gastosMes=json.rows.filter(g=>{
+        const f=String(g.fecha||'');
+        return f.startsWith(mesStr) || f.startsWith(mesStr.replace('-0','-'));
+      });
+      setLocal(cacheKey, gastosMes);
     }
   }catch(e){
     // usa cache
@@ -722,14 +728,30 @@ updateHeaderSub();
 (async()=>{
   const mesKey=String(new Date().getFullYear())+'-'+String(new Date().getMonth()+1).padStart(2,'0');
   try{
-    // Verificar conexion
+    // Cargar presupuesto del mes
     const res=await fetch(APPS_SCRIPT_URL+'?leer_presup=1&mes='+mesKey,{redirect:'follow'});
     const json=await res.json();
     setSyncDot('ok');
-    // Si hay presupuesto en el Sheet, guardarlo local
     if(json.status==='ok'&&json.presupuestos&&Object.keys(json.presupuestos).length>0){
       setLocal('presup_'+mesKey, json.presupuestos);
     }
+    // Precargar gastos del mes actual en background
+    fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'})
+      .then(r=>r.json())
+      .then(j=>{
+        if(j.status==='ok'&&j.rows){
+          setLocal('gastos_bw', j.rows);
+          // Cache por mes
+          const byMes={};
+          j.rows.forEach(g=>{
+            const f=String(g.fecha||'');
+            const m=f.substring(0,7);
+            if(!byMes[m]) byMes[m]=[];
+            byMes[m].push(g);
+          });
+          Object.entries(byMes).forEach(([m,rows])=>setLocal('gastos_mes_'+m,rows));
+        }
+      }).catch(()=>{});
   }catch(e){ setSyncDot('err'); }
 })();
 </script>
