@@ -386,6 +386,21 @@ let presMes = new Date().getMonth(), presAnio = new Date().getFullYear();
 // ── Utils ──────────────────────────────────────────────────────────────────
 function today(){ return new Date().toISOString().split('T')[0]; }
 function fmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
+
+function normFecha(f){
+  if(!f) return '';
+  const s=String(f);
+  // Already YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+  // Google Sheets format: "Sun Aug 30 2026 00:00:00 GMT-0300..."
+  try{
+    const d=new Date(s);
+    if(!isNaN(d)){
+      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    }
+  }catch(e){}
+  return s.substring(0,10);
+}
 function setSyncDot(s){ document.getElementById('sync-dot').className='sync-dot'+(s?' '+s:''); }
 function getLocal(k,def){ try{ return JSON.parse(localStorage.getItem(k)||'null')||def; }catch(e){ return def; } }
 function setLocal(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
@@ -503,6 +518,7 @@ async function renderHistorial(){
     const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
     const json=await res.json();
     if(json.status==='ok'&&json.rows){
+      json.rows.forEach(g=>{ g.fecha=normFecha(g.fecha); });
       gastos=json.rows;
       setLocal('gastos_bw',gastos);
     }
@@ -577,10 +593,8 @@ async function renderPresupuesto(){
       // Guardar todos en cache general
       setLocal('gastos_bw', json.rows);
       // Filtrar para este mes
-      gastosMes=json.rows.filter(g=>{
-        const f=String(g.fecha||'');
-        return f.startsWith(mesStr) || f.startsWith(mesStr.replace('-0','-'));
-      });
+      json.rows.forEach(g=>{ g.fecha=normFecha(g.fecha); });
+      gastosMes=json.rows.filter(g=>g.fecha.startsWith(mesStr));
       setLocal(cacheKey, gastosMes);
     }
   }catch(e){
@@ -744,8 +758,8 @@ updateHeaderSub();
           // Cache por mes
           const byMes={};
           j.rows.forEach(g=>{
-            const f=String(g.fecha||'');
-            const m=f.substring(0,7);
+            g.fecha=normFecha(g.fecha);
+            const m=g.fecha.substring(0,7);
             if(!byMes[m]) byMes[m]=[];
             byMes[m].push(g);
           });
