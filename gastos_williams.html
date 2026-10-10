@@ -172,6 +172,26 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
 .modal-save{width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;margin-top:16px}
 
 .loading-msg{text-align:center;padding:30px;color:var(--text3);font-size:14px}
+/* Historial por categoría */
+#cat-mes{min-width:0;width:155px;font:inherit;font-size:14px;border:1px solid var(--border-strong);border-radius:7px;padding:5px;background:var(--surface);color:var(--text)}
+.cat-total{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px;font-size:13px;color:var(--text2)}
+.cat-total strong{font-size:20px;color:var(--text);white-space:nowrap}
+.cat-status{font-size:12px;color:var(--text2);margin-top:10px;line-height:1.4}
+.category-group{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.category-group summary{display:flex;align-items:center;gap:8px;padding:15px 12px;cursor:pointer;list-style:none;font-size:14px;font-weight:600;color:var(--text)}
+.category-group summary::-webkit-details-marker{display:none}
+.category-group summary::before{content:'›';font-size:21px;color:var(--text2)}
+.category-group[open] summary::before{transform:rotate(90deg)}
+.category-name{flex:1;min-width:0;overflow-wrap:anywhere}
+.category-label{display:flex;align-items:center;gap:7px}
+.category-label i{font-size:19px;color:var(--text2);flex-shrink:0}
+.category-name small{display:block;font-size:11px;font-weight:400;color:var(--text2);margin-top:3px}
+.category-amount{white-space:nowrap}
+.category-detail{margin:0 12px;border-top:1px solid var(--border)}
+.category-detail .hist-item{align-items:flex-start;gap:12px;padding:12px 0}
+.category-detail .hist-desc{white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+.category-detail .hist-meta{line-height:1.6;color:var(--text2)}
+.category-detail .hist-monto{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -198,6 +218,9 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
     <div class="tab" id="tab-historial" onclick="switchTab('historial')">
       <i class="ti ti-list"></i>Historial
     </div>
+    <button class="tab" id="tab-categorias" onclick="switchTab('categorias')" type="button" style="background:none;border-top:0;border-left:0;border-right:0;font-family:inherit">
+      <i class="ti ti-category"></i>Historial categoría
+    </button>
   </div>
 
   <!-- ═══ VIEW: CARGAR ═══ -->
@@ -227,7 +250,8 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
         <button class="toggle-btn" data-medio="Débito MercadoPago" onclick="setMedio(this)"><i class="ti ti-brand-mastercard"></i>Débito MP</button>
         <button class="toggle-btn" data-medio="Tarjeta débito" onclick="setMedio(this)"><i class="ti ti-credit-card"></i>T. débito</button>
         <button class="toggle-btn" data-medio="Tarjeta crédito" onclick="setMedio(this)"><i class="ti ti-credit-card"></i>T. crédito</button>
-        <button class="toggle-btn" data-medio="Transferencia" onclick="setMedio(this)" style="grid-column:1/-1"><i class="ti ti-arrows-right-left"></i>Transferencia</button>
+        <button class="toggle-btn" data-medio="Transferencia" onclick="setMedio(this)"><i class="ti ti-arrows-right-left"></i>Transferencia</button>
+        <button class="toggle-btn" data-medio="saldo ML" onclick="setMedio(this)"><i class="ti ti-wallet"></i>saldo ML</button>
       </div>
       <div class="efectivo-badge visible" id="efectivo-badge"><i class="ti ti-info-circle"></i> Efectivo — no aparece en extractos. Este registro lo captura.</div>
     </div>
@@ -247,6 +271,7 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
         <button class="cat-btn" data-cat="Colegio" onclick="setCat(this)"><i class="ti ti-school"></i>Colegio</button>
         <button class="cat-btn" data-cat="Viaje" onclick="setCat(this)"><i class="ti ti-plane"></i>Viaje</button>
         <button class="cat-btn" data-cat="Otros" onclick="setCat(this)"><i class="ti ti-dots-circle-horizontal"></i>Otros</button>
+        <button class="cat-btn" data-cat="Gastos viaje trabajo" onclick="setCat(this)"><i class="ti ti-briefcase"></i>Gastos viaje trabajo</button>
         <button class="cat-btn cat-nueva" data-cat="__nueva__" onclick="setCat(this)"><i class="ti ti-plus"></i> Nueva categoría</button>
       </div>
       <input type="text" id="nueva-cat-input" placeholder="Nombre de la nueva categoría" oninput="catPersonalizada=this.value">
@@ -351,6 +376,22 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
     </div>
   </div>
 
+  <div class="view" id="view-categorias">
+    <div class="card">
+      <div class="mes-header">
+        <label class="field-label" for="cat-mes" style="margin:0">Mes</label>
+        <div class="mes-nav">
+          <button type="button" aria-label="Mes anterior" onclick="cambiarMesCategorias(-1)">‹</button>
+          <input type="month" id="cat-mes" aria-label="Mes del historial" onchange="seleccionarMesCategorias(this.value)">
+          <button type="button" aria-label="Mes siguiente" onclick="cambiarMesCategorias(1)">›</button>
+        </div>
+      </div>
+      <div class="cat-total"><span>Total del mes · Boris y Flor</span><strong id="cat-total">$0</strong></div>
+      <p id="cat-status" role="status" class="cat-status"></p>
+    </div>
+    <div id="cat-list"></div>
+  </div>
+
   <!-- ═══ MODAL PRESUPUESTO ═══ -->
   <div class="modal-overlay" id="modal-overlay" onclick="cerrarModalSiOverlay(event)">
     <div class="modal">
@@ -369,13 +410,13 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyxcCksWGSOUJTYuYENNJakKwlOMlLo58X76fv5_gCfCK_FbttDphb8hfL3EYjExvr2/exec';
 
 const CAT_ICONS = {
-  'Supermercado':'ti-shopping-cart','Farmacia':'ti-pill','Salida':'ti-fork-knife',
+  'Supermercado':'ti-shopping-cart','Farmacia':'ti-pill','Salida':'ti-glass-full',
   'Delivery':'ti-moped','Auto':'ti-car','Casa':'ti-home','Gastos chicos':'ti-coins',
   'Ropa':'ti-hanger','Actividad física':'ti-run','Colegio':'ti-school',
-  'Viaje':'ti-plane','Otros':'ti-dots-circle-horizontal'
+  'Gastos viaje trabajo':'ti-briefcase','Viaje':'ti-plane','Otros':'ti-dots-circle-horizontal'
 };
 
-const CATS = ['Supermercado','Farmacia','Salida','Delivery','Auto','Casa','Gastos chicos','Ropa','Actividad física','Colegio','Viaje','Otros'];
+const CATS = ['Supermercado','Farmacia','Salida','Delivery','Auto','Casa','Gastos chicos','Ropa','Actividad física','Colegio','Viaje','Otros','Gastos viaje trabajo'];
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
@@ -407,12 +448,13 @@ function setLocal(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 function switchTab(t){
-  ['cargar','presupuesto','historial'].forEach(id=>{
+  ['cargar','presupuesto','historial','categorias'].forEach(id=>{
     document.getElementById('view-'+id).classList.toggle('active', id===t);
     document.getElementById('tab-'+id).classList.toggle('active', id===t);
   });
   if(t==='presupuesto') renderPresupuesto();
   if(t==='historial') renderHistorial();
+  if(t==='categorias') renderCategorias();
 }
 
 // ── Header sub ─────────────────────────────────────────────────────────────
@@ -602,7 +644,7 @@ async function renderPresupuesto(){
   }
 
   // Separar por medio
-  const MEDIOS_CA=['Efectivo','Débito MercadoPago','Tarjeta débito','Transferencia','Transfer MercadoPago'];
+  const MEDIOS_CA=['Efectivo','Débito MercadoPago','Tarjeta débito','Transferencia','Transfer MercadoPago','saldo ML'];
   const MEDIOS_TARJ=['Tarjeta crédito'];
 
   let totalCA=0, totalTarj=0;
@@ -732,6 +774,63 @@ async function guardarPresupuestos(){
   }catch(e){}
 
   renderPresupuesto();
+}
+
+
+// Historial mensual: solo lectura, agrupado por el nombre guardado en el Sheet.
+let catMesKey=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+let catRequest=0;
+const escapeText=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function agruparCategorias(rows,mes){
+  const groups=new Map();
+  rows.forEach(g=>{
+    const fecha=normFecha(g.fecha);
+    if(!fecha.startsWith(mes+'-')) return;
+    const monto=Number(g.monto);
+    if(!Number.isFinite(monto)) return;
+    const cat=String(g.cat||'Sin categoría');
+    if(!groups.has(cat)) groups.set(cat,{cat,total:0,gastos:[]});
+    const group=groups.get(cat);group.total+=monto;group.gastos.push({...g,fecha,monto});
+  });
+  return [...groups.values()].sort((a,b)=>b.total-a.total||a.cat.localeCompare(b.cat,'es'));
+}
+function dibujarCategorias(rows,mes){
+  const groups=agruparCategorias(rows,mes);
+  const list=document.getElementById('cat-list');
+  const opened=new Set([...list.querySelectorAll('details[open]')].map(el=>el.dataset.category));
+  document.getElementById('cat-total').textContent=fmt(groups.reduce((sum,g)=>sum+g.total,0));
+  list.innerHTML=groups.length?groups.map(group=>`<details class="category-group" data-category="${escapeText(group.cat)}" ${opened.has(group.cat)?'open':''}>
+    <summary><span class="category-name"><span class="category-label"><i class="ti ${CAT_ICONS[group.cat]||'ti-tag'}" aria-hidden="true"></i><span>${escapeText(group.cat)}</span></span><small>${group.gastos.length} ${group.gastos.length===1?'gasto':'gastos'}</small></span><span class="category-amount">${fmt(group.total)}</span></summary>
+    <div class="category-detail">${group.gastos.sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(g=>`<div class="hist-item"><div class="hist-info"><div class="hist-desc">${escapeText(g.nota||'Sin nota')}</div><div class="hist-meta">${escapeText(g.fecha.split('-').reverse().join('/'))} · ${escapeText(g.quien)}<br>${escapeText(g.medio||'Sin medio informado')}</div></div><div class="hist-monto">${fmt(g.monto)}</div></div>`).join('')}</div>
+  </details>`).join(''):'<div class="card loading-msg">No hay gastos cargados para este mes.</div>';
+}
+function seleccionarMesCategorias(mes){
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return;
+  catMesKey=mes;document.getElementById('cat-list').innerHTML='';renderCategorias();
+}
+function cambiarMesCategorias(delta){
+  const [year,month]=catMesKey.split('-').map(Number),d=new Date(year,month-1+delta,1);
+  seleccionarMesCategorias(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+}
+async function renderCategorias(){
+  const request=++catRequest,mes=catMesKey;
+  document.getElementById('cat-mes').value=mes;
+  dibujarCategorias(getLocal('gastos_bw',[]),mes);
+  const status=document.getElementById('cat-status');
+  status.textContent='Actualizando desde el Sheet…';
+  try{
+    const res=await fetch(APPS_SCRIPT_URL+'?leer=1',{redirect:'follow'});
+    if(!res.ok) throw new Error('Lectura fallida');
+    const json=await res.json();
+    if(json.status!=='ok'||!Array.isArray(json.rows)) throw new Error('Respuesta inválida');
+    if(request!==catRequest) return;
+    const rows=json.rows.map(g=>({...g,fecha:normFecha(g.fecha)}));
+    setLocal('gastos_bw',rows);dibujarCategorias(rows,mes);
+    status.textContent='Actualizado. Tocá una categoría para ver todos sus gastos.';
+  }catch(e){
+    if(request!==catRequest) return;
+    status.textContent='No se pudo actualizar. Se muestra la última copia disponible en este celular.';
+  }
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
