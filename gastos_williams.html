@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Gastos">
@@ -192,6 +192,9 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
 .category-detail .hist-desc{white-space:normal;overflow-wrap:anywhere;line-height:1.4}
 .category-detail .hist-meta{line-height:1.6;color:var(--text2)}
 .category-detail .hist-monto{white-space:nowrap}
+
+.tabbar{overflow-x:auto;position:sticky;top:65px;z-index:9}.tab{min-width:77px;font-size:11px;color:var(--text2)}
+.v2-heading{font-size:15px;margin:12px 0;line-height:1.45}.v2-primary,.v2-secondary{font:inherit;font-size:14px;border-radius:8px;padding:12px;cursor:pointer;width:100%;margin-top:9px}.v2-primary{background:var(--accent);color:#fff;border:0}.v2-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}.v2-actions{display:flex;gap:8px}.review-amount{font-size:32px;margin:12px 0}.review-description{font-size:16px;line-height:1.5;overflow-wrap:anywhere}.v2-new{margin:12px 0}.v2-new summary{cursor:pointer;color:var(--accent);font-size:14px}.v2-new input,#review-card select,#review-card textarea,#tc-mes,#bank-mes{width:100%;padding:12px;margin:6px 0 12px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:14px}#review-card textarea{min-height:70px}.preview-note{background:#fff3e0;color:#754000;padding:12px;font-size:12px;line-height:1.5}.category-amount{white-space:nowrap;font-size:13px}button:disabled{opacity:.5;cursor:wait}
 </style>
 </head>
 <body>
@@ -219,10 +222,14 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
       <i class="ti ti-list"></i>Historial
     </div>
     <button class="tab" id="tab-categorias" onclick="switchTab('categorias')" type="button" style="background:none;border-top:0;border-left:0;border-right:0;font-family:inherit">
-      <i class="ti ti-category"></i>Historial categoría
+      <i class="ti ti-category"></i>Categorías caja de ahorro
     </button>
+    <button class="tab" id="tab-tarjeta" onclick="switchTab('tarjeta')" type="button" style="background:none;border:0;font-family:inherit"><i class="ti ti-credit-card"></i>Resúmenes de tarjeta</button>
+    <button class="tab" id="tab-revision" onclick="switchTab('revision')" type="button" style="display:none;background:none;border:0;font-family:inherit"><i class="ti ti-checklist"></i>Revisar</button>
   </div>
 
+  <div id="v2-notice" class="preview-note" hidden></div>
+  <div id="v2-access-panel" style="padding:14px" hidden></div>
   <!-- ═══ VIEW: CARGAR ═══ -->
   <div class="view active" id="view-cargar">
 
@@ -274,7 +281,7 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
         <button class="cat-btn" data-cat="Gastos viaje trabajo" onclick="setCat(this)"><i class="ti ti-briefcase"></i>Gastos viaje trabajo</button>
         <button class="cat-btn cat-nueva" data-cat="__nueva__" onclick="setCat(this)"><i class="ti ti-plus"></i> Nueva categoría</button>
       </div>
-      <input type="text" id="nueva-cat-input" placeholder="Nombre de la nueva categoría" oninput="catPersonalizada=this.value">
+      <input type="text" id="nueva-cat-input" placeholder="Nombre de la nueva categoría" oninput="catPersonalizada=this.value"><button id="create-category-button" type="button" style="display:none" class="v2-secondary" onclick="createFromLoad()">Crear categoría</button><p id="category-message" role="status" class="cat-status"></p>
     </div>
 
     <div class="card">
@@ -386,12 +393,17 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
           <button type="button" aria-label="Mes siguiente" onclick="cambiarMesCategorias(1)">›</button>
         </div>
       </div>
-      <div class="cat-total"><span>Total del mes · Boris y Flor</span><strong id="cat-total">$0</strong></div>
+      <div class="cat-total"><span>Gastos de la app · sin tarjeta de crédito</span><strong id="cat-total">$0</strong></div>
       <p id="cat-status" role="status" class="cat-status"></p>
     </div>
-    <div id="cat-list"></div>
+    <p class="cat-status">Incluye efectivo, débito, transferencias y saldo ML. Los consumos de tarjeta se consultan aparte.</p>
+    <div id="cat-list"></div><details class="card" ontoggle="if(this.open)renderUnmatchedApp()"><summary>Gastos cargados sin coincidencia en los extractos</summary><div id="unmatched-app"></div></details>
+    <details class="card" ontoggle="if(this.open)renderBank()"><summary>Movimientos del banco</summary><label for="bank-mes" class="field-label">Mes del extracto</label><input id="bank-mes" type="month" onchange="renderBank()"><div id="bank-list"></div></details>
+    <button class="v2-primary" onclick="startReview('ca',catMesKey)">Revisar movimientos de caja de ahorro</button>
   </div>
 
+  <div class="view" id="view-tarjeta"><button class="v2-secondary" onclick="refreshShared()">Actualizar</button><p id="v2-refresh-status" role="status" class="cat-status"></p><div class="card"><label class="field-label" for="tc-mes">Resumen del mes</label><select id="tc-mes" onchange="renderTarjeta()"></select><div class="cat-total"><span>Total del resumen en pesos</span><strong id="tc-total">—</strong></div><p class="cat-status" id="tc-status"></p><button class="v2-primary" id="tc-review" onclick="startReview('tc',document.getElementById('tc-mes').value)">Completar categorías pendientes</button></div><div id="tc-list"></div><div id="tc-usd"></div><button class="v2-secondary" onclick="lockV2()">Olvidar código en este dispositivo</button></div>
+  <div class="view" id="view-revision"><div class="card"><h2 id="review-heading" class="v2-heading">Revisar</h2><p id="review-count" role="status" class="cat-status"></p></div><div class="card" id="review-card"></div><button class="v2-secondary" onclick="exportReview()">Descargar respaldo de la revisión</button></div>
   <!-- ═══ MODAL PRESUPUESTO ═══ -->
   <div class="modal-overlay" id="modal-overlay" onclick="cerrarModalSiOverlay(event)">
     <div class="modal">
@@ -425,7 +437,7 @@ let quien='Boris', catSel='', catPersonalizada='', medioSel='Efectivo';
 let presMes = new Date().getMonth(), presAnio = new Date().getFullYear();
 
 // ── Utils ──────────────────────────────────────────────────────────────────
-function today(){ return new Date().toISOString().split('T')[0]; }
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmt(n){ return '$'+Math.round(n).toLocaleString('es-AR'); }
 
 function normFecha(f){
@@ -447,14 +459,16 @@ function getLocal(k,def){ try{ return JSON.parse(localStorage.getItem(k)||'null'
 function setLocal(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-function switchTab(t){
-  ['cargar','presupuesto','historial','categorias'].forEach(id=>{
+function switchTab(t){if(['cargar','presupuesto','historial','categorias'].includes(t))document.getElementById('v2-access-panel').hidden=true;
+  ['cargar','presupuesto','historial','categorias','tarjeta','revision'].forEach(id=>{
     document.getElementById('view-'+id).classList.toggle('active', id===t);
     document.getElementById('tab-'+id).classList.toggle('active', id===t);
   });
   if(t==='presupuesto') renderPresupuesto();
   if(t==='historial') renderHistorial();
   if(t==='categorias') renderCategorias();
+  if(t==='tarjeta') renderTarjeta();
+  if(t==='revision'){document.getElementById('tab-revision').style.display='flex';renderReview();}
 }
 
 // ── Header sub ─────────────────────────────────────────────────────────────
@@ -478,7 +492,7 @@ function setMedio(btn){
 function setCat(btn){
   document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  const inp=document.getElementById('nueva-cat-input');
+  const inp=document.getElementById('nueva-cat-input');document.getElementById('create-category-button').style.display=btn.dataset.cat==='__nueva__'?'block':'none';
   if(btn.dataset.cat==='__nueva__'){ inp.classList.add('visible'); inp.focus(); catSel='__nueva__'; }
   else{ inp.classList.remove('visible'); catSel=btn.dataset.cat; }
 }
@@ -494,6 +508,7 @@ async function guardarGasto(){
   if(!cat){ errEl.textContent='Seleccioná una categoría.'; errEl.classList.add('visible'); return; }
   if(catSel==='__nueva__'&&!catPersonalizada.trim()){ errEl.textContent='Escribí el nombre de la categoría.'; errEl.classList.add('visible'); document.getElementById('nueva-cat-input').focus(); return; }
 
+  try{await createCategory(cat);}catch(e){errEl.textContent=e.message;errEl.classList.add('visible');return;}
   const cruzable=medioSel!=='Efectivo';
   const gasto={fecha,quien,monto,cat,medio:medioSel,cruzable,nota,ts:Date.now()};
 
@@ -588,8 +603,8 @@ function renderHistList(gastos){
     return `<div class="hist-item">
       <div class="hist-ico ${ef?'ef':''}"><i class="ti ${icon}"></i></div>
       <div class="hist-info">
-        <div class="hist-desc">${g.cat}${g.nota?' · '+g.nota:''}</div>
-        <div class="hist-meta">${g.quien} · ${g.fecha}<span class="hist-pill ${ef?'ef':''}">${g.medio||'Efectivo'}</span></div>
+        <div class="hist-desc">${escapeText(g.cat)}${g.nota?' · '+escapeText(g.nota):''}</div>
+        <div class="hist-meta">${escapeText(g.quien)} · ${escapeText(g.fecha)}<span class="hist-pill ${ef?'ef':''}">${escapeText(g.medio||'Efectivo')}</span></div>
       </div>
       <div class="hist-monto">${fmt(Number(g.monto)||0)}</div>
     </div>`;
@@ -648,7 +663,7 @@ async function renderPresupuesto(){
   const MEDIOS_TARJ=['Tarjeta crédito'];
 
   let totalCA=0, totalTarj=0;
-  const totCat={};
+  const totCat=Object.create(null);
   gastosMes.forEach(g=>{
     const m=Number(g.monto||0);
     const medio=g.medio||'Efectivo';
@@ -701,7 +716,7 @@ async function renderPresupuesto(){
     const overLabel=pct>100?` <span style="color:var(--red);font-size:10px;font-weight:600">${pct}%</span>`:'';
     html+=`<div class="presup-cat-row${limite===0?' no-presup':''}">
       <div class="presup-cat-top">
-        <div class="presup-cat-name"><i class="ti ${icon}"></i>${cat}</div>
+        <div class="presup-cat-name"><i class="ti ${icon}"></i>${escapeText(cat)}</div>
         <div class="presup-cat-nums">
           <span class="presup-cat-gastado">${fmt(gastado)}</span>
           ${limite>0?` <span style="color:var(--text3)">/ ${fmt(limite)}</span>${overLabel}`:'<span style="color:var(--text3)"> (sin límite)</span>'}
@@ -733,11 +748,11 @@ async function abrirModalPresupuesto(){
   let html=`<div style="background:var(--accent-bg);margin:-12px -12px 8px;padding:12px;border-radius:var(--radius-sm) var(--radius-sm) 0 0">
     <div class="presup-input-row" style="border-bottom:.5px solid rgba(26,110,245,.2);padding-bottom:10px;margin-bottom:10px">
       <div class="presup-input-label" style="font-weight:700;color:var(--accent-text)"><i class="ti ti-credit-card-off" style="color:var(--accent)"></i>C/A + Efectivo</div>
-      <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="__total_ca__" value="${caVal}" style="border-color:var(--accent)">
+      <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="__total_ca__" value="${escapeText(caVal)}" style="border-color:var(--accent)">
     </div>
     <div class="presup-input-row">
       <div class="presup-input-label" style="font-weight:700;color:#2d6a4f"><i class="ti ti-credit-card" style="color:#2d6a4f"></i>Tarjeta de crédito</div>
-      <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="__total_tarj__" value="${tarjVal}" style="border-color:#2d6a4f">
+      <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="__total_tarj__" value="${escapeText(tarjVal)}" style="border-color:#2d6a4f">
     </div>
   </div>
   <div style="font-size:11px;color:var(--text3);padding:4px 0 10px;border-bottom:.5px solid var(--border);margin-bottom:8px">Límites orientativos por categoría (suma ambos medios)</div>`;
@@ -745,8 +760,8 @@ async function abrirModalPresupuesto(){
     const icon=CAT_ICONS[cat]||'ti-tag';
     const val=presupuestos[cat]||'';
     html+=`<div class="presup-input-row">
-      <div class="presup-input-label"><i class="ti ${icon}"></i>${cat}</div>
-      <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="${cat}" value="${val}">
+      <div class="presup-input-label"><i class="ti ${icon}"></i>${escapeText(cat)}</div>
+      <input class="presup-input" type="number" inputmode="numeric" placeholder="0" data-cat="${escapeText(cat)}" value="${escapeText(val)}">
     </div>`;
   });
   document.getElementById('modal-inputs').innerHTML=html;
@@ -785,7 +800,7 @@ function agruparCategorias(rows,mes){
   const groups=new Map();
   rows.forEach(g=>{
     const fecha=normFecha(g.fecha);
-    if(!fecha.startsWith(mes+'-')) return;
+    if(!fecha.startsWith(mes+'-')||g.medio==='Tarjeta crédito') return;
     const monto=Number(g.monto);
     if(!Number.isFinite(monto)) return;
     const cat=String(g.cat||'Sin categoría');
@@ -833,9 +848,172 @@ async function renderCategorias(){
   }
 }
 
+// Historiales y revisión compartida. Los datos bancarios nunca se incluyen en el HTML público.
+let v2={records:[],statements:[],categories:[],reviews:{}};
+let v2Ready=false, reviewSource='ca', reviewMonth='2026-10', reviewSkipped=new Set(), reviewCurrent='', reviewBusy=false;
+const V2_LOCAL=typeof LOCAL_PREVIEW!=='undefined';
+const v2Key='gastos_williams_revision_v2';
+let v2Access=getLocal('gw_access_code',''),v2LoadError='',v2PendingReview=null;
+function authPanel(){return `<div class="card"><h3 class="v2-heading">Abrir resúmenes y revisión</h3><p class="cat-status">Ingresá el código que comparten Boris y Flor. Queda guardado en este dispositivo.</p><label class="field-label" for="v2-access">Código de acceso</label><input id="v2-access" type="password" autocomplete="current-password" placeholder="Código compartido" style="width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:8px;font:inherit"><button id="v2-unlock" class="v2-primary" onclick="unlockV2()">Ingresar</button><p id="v2-access-error" role="status" class="cat-status">${escapeText(v2LoadError)}</p></div>`;}
+function showAccess(){document.getElementById('v2-access-panel').innerHTML=authPanel();document.getElementById('v2-access-panel').hidden=false;document.getElementById('v2-access')?.focus();}
+async function unlockV2(){
+ const input=document.getElementById('v2-access'),button=document.getElementById('v2-unlock');v2Access=input.value.trim();button.disabled=true;
+ try{await loadV2(true);if(!v2Ready)throw Error(v2LoadError);setLocal('gw_access_code',v2Access);document.getElementById('v2-access-panel').hidden=true;renderTarjeta();renderBank();if(v2PendingReview){const p=v2PendingReview;v2PendingReview=null;startReview(p.source,p.month);}if(document.getElementById('view-revision').classList.contains('active'))renderReview();}
+ catch(e){document.getElementById('v2-access-error').textContent=e.message;}finally{button.disabled=false;}
+}
+function lockV2(){
+ v2Access='';v2Ready=false;v2={records:[],statements:[],categories:[],reviews:{}};reviewCurrent='';
+ localStorage.removeItem('gw_access_code');localStorage.removeItem(v2Key);document.getElementById('tc-list').innerHTML='';document.getElementById('tc-usd').innerHTML='';document.getElementById('bank-list').innerHTML='';document.getElementById('unmatched-app').innerHTML='';document.getElementById('review-card').innerHTML='';document.getElementById('review-count').textContent='';document.getElementById('tc-total').textContent='—';showAccess();switchTab('tarjeta');
+}
+async function signedParams(action,payload){
+ if(!v2Access)throw Error('Ingresá el código para abrir los resúmenes.');
+ const serialized=action==='state'?'':JSON.stringify(payload),ts=String(Date.now()),message=action+'\n'+ts+'\n'+serialized;
+ const encoder=new TextEncoder(),key=await crypto.subtle.importKey('raw',encoder.encode(v2Access),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const sig=await crypto.subtle.sign('HMAC',key,encoder.encode(message));
+ const signature=btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+ return new URLSearchParams({v2:action,ts,signature,...(serialized?{payload:serialized}:{})});
+}
+
+function money(n,c='ARS'){return new Intl.NumberFormat('es-AR',{style:'currency',currency:c,minimumFractionDigits:2}).format(Number(n)||0);}
+function categoryKey(s){return String(s).trim().replace(/\s+/g,' ').toLocaleLowerCase('es');}
+function catalog(){const m=new Map();[...CATS,...v2.categories,...getLocal('gastos_bw',[]).map(g=>g.cat),...v2.records.map(g=>g.category)].filter(Boolean).forEach(s=>{s=String(s).trim().replace(/\s+/g,' ');if(!m.has(categoryKey(s)))m.set(categoryKey(s),s)});return [...m.values()];}
+function refreshCatalog(){
+ const items=catalog();CATS.splice(0,CATS.length,...items);
+ document.querySelector('.cats-grid').innerHTML=items.map(c=>`<button type="button" class="cat-btn${catSel===c?' active':''}" data-cat="${escapeText(c)}" onclick="setCat(this)"><i class="ti ${CAT_ICONS[c]||'ti-tag'}"></i>${escapeText(c)}</button>`).join('')+'<button type="button" class="cat-btn cat-nueva" data-cat="__nueva__" onclick="setCat(this)"><i class="ti ti-plus"></i>Nueva categoría</button>';
+}
+async function v2Call(action,payload={}){
+ if(V2_LOCAL){
+  if(action==='state')return {status:'ok',version:2,...v2};
+  if(action==='category'){if(!v2.categories.some(c=>categoryKey(c)===categoryKey(payload.name)))v2.categories.push(payload.name);}
+  if(action==='review'){
+   const prev=v2.reviews[payload.id];if((prev?.revision||0)!==payload.expectedRevision)throw Error('Este movimiento cambió. Actualizá antes de resolverlo.');
+   v2.reviews[payload.id]={...payload,revision:(prev?.revision||0)+1,updatedAt:new Date().toISOString()};
+   if(payload.action==='create'){
+    const r=v2.records.find(r=>r.id===payload.id);const rows=getLocal('gastos_bw',[]);rows.push({id:'review-'+r.id,fecha:r.date,quien:payload.person,monto:r.amount,cat:payload.category,medio:payload.medium,nota:payload.note||r.description});setLocal('gastos_bw',rows);
+   }
+  }
+  localStorage.setItem(v2Key,JSON.stringify(v2));return {status:'ok',version:2,...v2};
+ }
+ const params=await signedParams(action,payload);
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
+ try{const res=await fetch(APPS_SCRIPT_URL+'?'+params,{redirect:'follow',signal:controller.signal});const j=await res.json();if(!res.ok||j.status!=='ok'||j.version!==2)throw Error(j.error||'Falta activar la actualización del Sheet.');return j;}finally{clearTimeout(timer);}
+}
+async function loadV2(strict=false){
+ if(V2_LOCAL){v2=getLocal(v2Key,LOCAL_PREVIEW);v2Ready=true;refreshCatalog();return;}
+ if(!v2Access){v2Ready=false;refreshCatalog();return;}
+ try{const j=await v2Call('state');v2=j;v2Ready=true;v2LoadError='';if(j.rows)setLocal('gastos_bw',j.rows);}
+ catch(e){v2Ready=false;v2LoadError=e.message;if(strict)throw e;}
+ refreshCatalog();
+}
+async function createCategory(name,origin='load'){
+ const clean=String(name||'').trim().replace(/\s+/g,' ');if(!clean||clean.length>60)throw Error('Escribí un nombre de hasta 60 caracteres.');
+ const existing=catalog().find(c=>categoryKey(c)===categoryKey(clean));
+ if(existing)return existing;
+ if(!v2Ready){showAccess();throw Error('Ingresá el código para crear una categoría compartida.');}
+ const j=await v2Call('category',{name:clean});v2.categories=j.categories;refreshCatalog();return clean;
+}
+async function createFromLoad(){const e=document.getElementById('category-message');try{const name=await createCategory(document.getElementById('nueva-cat-input').value);catSel=name;catPersonalizada='';document.getElementById('nueva-cat-input').classList.remove('visible');refreshCatalog();e.textContent=V2_LOCAL?'Categoría creada en esta vista previa.':'Categoría disponible para Boris y Flor.';}catch(err){e.textContent=err.message;}}
+function effective(r){const d=v2.reviews[r.id];return {...r,category:d?.category||r.category,note:d?.note||r.note,decision:d};}
+function recordGroups(records,currency='ARS'){
+ const groups=new Map();records.filter(r=>r.currency===currency).map(effective).forEach(r=>{const c=r.category||'Sin categoría';if(!groups.has(c))groups.set(c,{cat:c,total:0,rows:[]});groups.get(c).total+=r.amount;groups.get(c).rows.push(r);});return [...groups.values()].sort((a,b)=>b.total-a.total);
+}
+function groupHTML(records,currency='ARS'){
+ return recordGroups(records,currency).map(g=>`<details class="category-group"><summary><span class="category-name"><span class="category-label"><i class="ti ${CAT_ICONS[g.cat]||'ti-tag'}"></i><span>${escapeText(g.cat)}</span></span><small>${g.rows.length} movimientos</small></span><span class="category-amount">${money(g.total,currency)}</span></summary><div class="category-detail">${g.rows.map(r=>`<div class="hist-item"><div class="hist-info"><div class="hist-desc">${escapeText(r.description)}</div><div class="hist-meta">${escapeText(r.date.split('-').reverse().join('/'))} · ${escapeText(r.person||'Sin asignar')}${r.installment?' · Cuota '+escapeText(r.installment):''}${r.card?' · '+escapeText(r.card):''}<br>${escapeText(r.note||r.basis||'')}</div></div><div class="hist-monto">${money(r.amount,currency)}</div></div>`).join('')}</div></details>`).join('');
+}
+function monthLabel(m){return MESES[Number(m.slice(5))-1]+' '+m.slice(0,4);}
+function renderTarjeta(){
+ if(!v2Ready&&!V2_LOCAL){showAccess();document.getElementById('tc-status').textContent='Ingresá para ver los resúmenes.';return;}
+ const select=document.getElementById('tc-mes');const previous=select.value;const months=[...new Set(v2.statements.map(s=>s.month))].sort().reverse();
+ select.innerHTML=months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');select.value=months.includes(previous)?previous:months[0]||'';
+ const mes=select.value,rows=v2.records.filter(r=>r.source==='tc'&&r.month===mes),statement=v2.statements.find(s=>s.month===mes);
+ document.getElementById('tc-status').textContent=!v2Ready&&!V2_LOCAL?'Falta activar la conexión de los resúmenes en el Sheet.':statement?'Cierre '+statement.closing.split('-').reverse().join('/')+'. Tocá una categoría para abrir el detalle.':'Todavía no hay resúmenes importados.';
+ document.getElementById('tc-total').textContent=statement?money(statement.ars):'—';
+ document.getElementById('tc-list').innerHTML=groupHTML(rows,'ARS');
+ const usd=rows.filter(r=>r.currency==='USD');document.getElementById('tc-usd').innerHTML=usd.length?'<h3 class="v2-heading">Dólares · separados del total en pesos</h3>'+groupHTML(usd,'USD'):'';
+ document.getElementById('tc-review').disabled=!rows.length||!v2Ready;
+}
+function renderBank(){
+ if(!v2Ready&&!V2_LOCAL){showAccess();return;}
+ const mes=document.getElementById('bank-mes').value||catMesKey;document.getElementById('bank-mes').value=mes;
+ const rows=v2.records.filter(r=>r.source==='ca'&&r.month===mes);
+ const expenses=rows.filter(r=>r.kind==='expense'&&v2.reviews[r.id]?.action!=='exclude');
+ const other=rows.filter(r=>!expenses.includes(r)).map(r=>({...r,category:r.kind==='income'?'Ingresos':r.kind==='card_payment'?'Pagos de tarjeta':r.category,decision:null}));
+ document.getElementById('bank-list').innerHTML=rows.length?'<h3 class="v2-heading">Débitos para revisar o clasificar · '+money(expenses.reduce((s,r)=>s+r.amount,0))+'</h3>'+groupHTML(expenses)+'<details class="category-group"><summary>Ingresos, pagos de tarjeta y movimientos apartados</summary>'+other.map(r=>`<div class="hist-item"><div class="hist-info"><div class="hist-desc">${escapeText(r.description)}</div><div class="hist-meta">${escapeText(r.date)} · ${escapeText(r.category)}</div></div><div class="hist-monto">${money(r.amount)}</div></div>`).join('')+'</details>':'<p class="cat-status">No hay extracto importado para este mes.</p>';
+}
+function candidates(r){
+ if(r.currency!=='ARS'||r.amount<=0)return [];
+ const used=new Set(Object.values(v2.reviews).filter(d=>d.action==='link').map(d=>d.appId));
+ return getLocal('gastos_bw',[]).map((g,i)=>({...g,_id:g.id||'row-'+i})).filter(g=>!used.has(g._id)&&g.medio!=='Efectivo'&&g.medio!=='saldo ML'&&(r.source==='tc'?g.medio==='Tarjeta crédito':g.medio!=='Tarjeta crédito')&&Math.abs(Number(g.monto)-r.amount)<=1&&Math.abs(new Date(normFecha(g.fecha))-new Date(r.date))<=4*86400000);
+}
+function unresolved(r){
+ const d=v2.reviews[r.id];if(d&&['classify','create','link','exclude'].includes(d.action))return false;
+ if(r.kind!=='expense'||r.currency!=='ARS'||r.amount<=0)return false;
+ if(r.source==='tc')return !r.category||['Sin categoría','No identificado'].includes(r.category);
+ return true;
+}
+function startReview(source,month){if(!v2Ready&&!V2_LOCAL){v2PendingReview={source,month};showAccess();return;}reviewSource=source;reviewMonth=month||catMesKey;reviewSkipped=new Set();switchTab('revision');}
+function reviewRows(){return v2.records.filter(r=>r.source===reviewSource&&r.month===reviewMonth&&unresolved(r));}
+function renderReview(){
+ if(!v2Ready&&!V2_LOCAL){showAccess();return;}
+ const rows=reviewRows(),all=v2.records.filter(r=>r.source===reviewSource&&r.month===reviewMonth&&r.kind==='expense'&&r.currency==='ARS'&&r.amount>0);
+ const sorted=[...rows].sort((a,b)=>Number(v2.reviews[a.id]?.action==='defer')-Number(v2.reviews[b.id]?.action==='defer'));
+ const r=sorted.find(r=>!reviewSkipped.has(r.id));reviewCurrent=r?.id||'';
+ document.getElementById('review-heading').textContent=(reviewSource==='ca'?'Caja de ahorro':'Tarjeta')+' · '+monthLabel(reviewMonth);
+ document.getElementById('review-count').textContent=rows.length+' pendientes de '+all.length+' movimientos';
+ const target=document.getElementById('review-card');
+ if(!r){target.innerHTML=`<h3>${rows.length?'Dejaste '+rows.length+' para después':'Terminaste esta revisión'}</h3><p class="cat-status">${rows.length?'Siguen pendientes. Podés retomarlos cuando quieras.':'Los movimientos revisados conservan su categoría y detalle.'}</p>${rows.length?'<button class="v2-primary" onclick="reviewSkipped.clear();renderReview()">Retomar pendientes</button>':''}`;return;}
+ const d=v2.reviews[r.id]||{},matches=candidates(r);
+ target.innerHTML=`<p class="cat-status">${escapeText(r.date.split('-').reverse().join('/'))}${r.person?' · '+escapeText(r.person):''}</p><h2 class="review-amount">${money(r.amount)}</h2><p class="review-description">${escapeText(r.description)}</p><p class="cat-status">${escapeText(r.basis||'')}${r.suggestedCategory?' · Categoría sugerida: '+escapeText(r.suggestedCategory):''}</p>
+ ${matches.length?'<label class="field-label" for="review-match">Posibles cargas en la app · confirmar</label><select id="review-match"><option value="">Elegí una coincidencia</option>'+matches.map(m=>`<option value="${escapeText(m._id)}">${escapeText(m.fecha)} · ${escapeText(m.quien)} · ${money(m.monto)} · ${escapeText(m.nota||m.cat)}</option>`).join('')+'</select><button class="v2-secondary" onclick="resolveReview(\'link\')">Ya está cargado: vincular</button>':'<p class="cat-status">No hay una coincidencia por importe y fecha. Revisá el concepto antes de cargarlo.</p>'}
+ <label class="field-label" for="review-category">Categoría</label><select id="review-category"><option value="">Elegí una categoría</option>${catalog().map(c=>`<option value="${escapeText(c)}" ${d.category===c?'selected':''}>${escapeText(c)}</option>`).join('')}</select>
+ <details class="v2-new"><summary>Crear una categoría</summary><input id="review-new-category" placeholder="Nombre de la categoría" maxlength="60"><button class="v2-secondary" onclick="createFromReview()">Crear y usar</button></details>
+ <label class="field-label" for="review-note">¿De qué fue?</label><textarea id="review-note" placeholder="Una nota para reconocerlo después">${escapeText(d.note||r.note||'')}</textarea>
+ ${r.source==='ca'?'<label class="field-label" for="review-person">¿Quién?</label><select id="review-person"><option value="">Elegí una persona</option><option>Boris</option><option>Flor</option></select><label class="field-label" for="review-medium">Medio de pago</label><select id="review-medium"><option value="">Elegí el medio</option><option>Tarjeta débito</option><option>Transferencia</option><option>Transfer MercadoPago</option><option>Débito MercadoPago</option></select>':''}
+ <button class="v2-primary" onclick="resolveReview('${r.source==='ca'?'create':'classify'}')">${r.source==='ca'?'Cargar gasto en la app':'Guardar categoría'}</button>
+ <div class="v2-actions"><button class="v2-secondary" onclick="resolveReview('defer')">Después</button><button class="v2-secondary" onclick="resolveReview('exclude')">Dejar fuera</button></div><p id="review-error" role="status" class="cat-status"></p>`;
+}
+async function createFromReview(){const e=document.getElementById('review-error');try{const name=await createCategory(document.getElementById('review-new-category').value,'review');const s=document.getElementById('review-category');s.innerHTML='<option value="">Elegí una categoría</option>'+catalog().map(c=>`<option>${escapeText(c)}</option>`).join('');s.value=name;}catch(err){e.textContent=err.message;}}
+async function resolveReview(action){
+ if(reviewBusy||!reviewCurrent)return;const r=v2.records.find(r=>r.id===reviewCurrent),d=v2.reviews[r.id];
+ const category=document.getElementById('review-category').value,note=document.getElementById('review-note').value.trim();
+ const appId=document.getElementById('review-match')?.value||'',person=document.getElementById('review-person')?.value||r.person,medium=document.getElementById('review-medium')?.value||'';
+ const e=document.getElementById('review-error');
+ if(['classify','create'].includes(action)&&!category){e.textContent='Elegí una categoría.';return;}
+ if(action==='create'&&(!person||!medium)){e.textContent='Elegí quién y el medio de pago.';return;}
+ if(action==='link'&&!appId){e.textContent='Elegí qué carga corresponde a este movimiento.';return;}
+ if(action==='exclude'&&!note){e.textContent='Anotá por qué lo dejamos fuera.';return;}
+ reviewBusy=true;targetDisable(true);
+ try{const j=await v2Call('review',{id:r.id,action,category,note,appId,person,medium,expectedRevision:d?.revision||0});v2=j;if(j.rows)setLocal('gastos_bw',j.rows);if(action==='defer')reviewSkipped.add(r.id);renderReview();}
+ catch(err){e.textContent='No se guardó: '+err.message;}finally{reviewBusy=false;targetDisable(false);}
+}
+function targetDisable(disabled){document.querySelectorAll('#review-card button').forEach(b=>b.disabled=disabled);}
+function exportReview(){if(!v2Ready)return;const blob=new Blob([JSON.stringify(v2,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='revision-gastos-williams.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function renderUnmatchedApp(){
+ if(!v2Ready&&!V2_LOCAL){showAccess();return;}
+ const mes=catMesKey,rows=getLocal('gastos_bw',[]).filter(g=>normFecha(g.fecha).startsWith(mes+'-')&&!['Efectivo','saldo ML'].includes(g.medio));
+ const linked=new Set(Object.values(v2.reviews).filter(d=>d.action==='link').map(d=>d.appId));
+ const pending=rows.filter(g=>!String(g.id||'').startsWith('review-')&&!linked.has(g.id)).map(g=>{
+  const source=g.medio==='Tarjeta crédito'?'tc':'ca';
+  const available=v2.records.filter(r=>r.source===source&&r.currency==='ARS'&&r.kind==='expense');
+  const options=available.filter(r=>Math.abs(r.amount-Number(g.monto))<=1&&Math.abs(new Date(r.date)-new Date(normFecha(g.fecha)))<=4*86400000);
+  return {g,source,options};
+ }).filter(x=>!x.options.length);
+ document.getElementById('unmatched-app').innerHTML=pending.length?pending.map(({g,source})=>{
+ const closed=v2.statements.map(s=>s.closing).sort().at(-1),late=source==='tc'&&normFecha(g.fecha)>closed;
+ return `<div class="hist-item"><div class="hist-info"><div class="hist-desc">${escapeText(g.nota||g.cat)}</div><div class="hist-meta">${escapeText(normFecha(g.fecha))} · ${escapeText(g.quien)} · ${escapeText(g.medio)}<br>${late?'Posterior al cierre: esperar el próximo resumen.':'Sin coincidencia por importe y fecha; revisar.'}</div></div><div class="hist-monto">${money(g.monto)}</div></div>`;
+ }).join(''):'<p class="cat-status">No quedaron cargas sin candidato por importe y fecha para este mes. Las coincidencias propuestas todavía requieren confirmación.</p>';
+}
+
+async function refreshShared(){
+ const msg=document.getElementById('v2-refresh-status');msg.textContent='Actualizando…';
+ try{await loadV2(true);if(!v2Ready){showAccess();throw Error('Ingresá el código para actualizar.');}renderTarjeta();renderBank();if(document.getElementById('view-revision').classList.contains('active'))renderReview();msg.textContent='Actualizado.';}
+ catch(e){msg.textContent=e.message;}
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.getElementById('fecha').value=today();
 updateHeaderSub();
+loadV2();
 
 // Al arrancar: verificar conexion y cargar presupuesto del mes actual
 (async()=>{
@@ -853,7 +1031,7 @@ updateHeaderSub();
       .then(r=>r.json())
       .then(j=>{
         if(j.status==='ok'&&j.rows){
-          setLocal('gastos_bw', j.rows);
+          setLocal('gastos_bw', j.rows);refreshCatalog();
           // Cache por mes
           const byMes={};
           j.rows.forEach(g=>{
