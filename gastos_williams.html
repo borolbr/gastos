@@ -901,7 +901,7 @@ async function v2Call(action,payload={}){
 async function loadV2(strict=false){
  if(V2_LOCAL){v2=getLocal(v2Key,LOCAL_PREVIEW);v2Ready=true;refreshCatalog();return;}
  if(!v2Access){v2Ready=false;refreshCatalog();return;}
- try{const j=await v2Call('state');v2=j;v2Ready=true;v2LoadError='';if(j.rows)setLocal('gastos_bw',j.rows);}
+ try{const j=await v2Call('state');v2=j;v2Ready=true;v2LoadError='';if(j.rows)setLocal('gastos_bw',j.rows);if(document.getElementById('view-tarjeta').classList.contains('active')){document.getElementById('v2-access-panel').hidden=true;renderTarjeta();}}
  catch(e){v2Ready=false;v2LoadError=e.message;if(strict)throw e;}
  refreshCatalog();
 }
@@ -946,6 +946,7 @@ function candidates(r){
  return getLocal('gastos_bw',[]).map((g,i)=>({...g,_id:g.id||'row-'+i})).filter(g=>!used.has(g._id)&&g.medio!=='Efectivo'&&g.medio!=='saldo ML'&&(r.source==='tc'?g.medio==='Tarjeta crédito':g.medio!=='Tarjeta crédito')&&Math.abs(Number(g.monto)-r.amount)<=1&&Math.abs(new Date(normFecha(g.fecha))-new Date(r.date))<=4*86400000);
 }
 function unresolved(r){
+ if(r.source==='tc'&&r.basis==='Resumen de septiembre revisado')return false;
  const d=v2.reviews[r.id];if(d&&['classify','create','link','exclude'].includes(d.action))return false;
  if(r.kind!=='expense'||r.currency!=='ARS'||r.amount<=0)return false;
  if(r.source==='tc')return !r.category||['Sin categoría','No identificado'].includes(r.category);
