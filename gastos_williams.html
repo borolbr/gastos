@@ -260,7 +260,7 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
         <button class="toggle-btn" data-medio="Tarjeta débito" onclick="setMedio(this)"><i class="ti ti-credit-card"></i>T. débito</button>
         <button class="toggle-btn" data-medio="Tarjeta crédito" onclick="setMedio(this)"><i class="ti ti-credit-card"></i>T. crédito</button>
         <button class="toggle-btn" data-medio="Transferencia" onclick="setMedio(this)"><i class="ti ti-arrows-right-left"></i>Transferencia</button>
-        <button class="toggle-btn" data-medio="saldo ML" onclick="setMedio(this)"><i class="ti ti-wallet"></i>saldo ML</button>
+        <button class="toggle-btn" data-medio="saldo ML" onclick="setMedio(this)"><i class="ti ti-wallet"></i>saldo ML</button><button class="toggle-btn" data-medio="servicio home banking" onclick="setMedio(this)"><i class="ti ti-building-bank"></i>servicio home banking</button>
       </div>
       <div class="efectivo-badge visible" id="efectivo-badge"><i class="ti ti-info-circle"></i> Efectivo — no aparece en extractos. Este registro lo captura.</div>
     </div>
@@ -857,6 +857,7 @@ let v2={records:[],statements:[],categories:[],reviews:{}};
 let v2Ready=false, reviewSource='ca', reviewMonth='2026-10', reviewSkipped=new Set(), reviewCurrent='', reviewBusy=false;
 const V2_LOCAL=typeof LOCAL_PREVIEW!=='undefined';
 const v2Key='gastos_williams_revision_v2';
+const PAYMENT_METHODS=['Efectivo','Transfer MercadoPago','Débito MercadoPago','Tarjeta débito','Tarjeta crédito','Transferencia','saldo ML','servicio home banking'];
 let v2Access=getLocal('gw_access_code',''),v2LoadError='',v2PendingReview=null;
 function authPanel(){return `<div class="card"><h3 class="v2-heading">Abrir resúmenes y revisión</h3><p class="cat-status">Ingresá el código que comparten Boris y Flor. Queda guardado en este dispositivo.</p><label class="field-label" for="v2-access">Código de acceso</label><input id="v2-access" type="password" autocomplete="current-password" placeholder="Código compartido" style="width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:8px;font:inherit"><button id="v2-unlock" class="v2-primary" onclick="unlockV2()">Ingresar</button><p id="v2-access-error" role="status" class="cat-status">${escapeText(v2LoadError)}</p></div>`;}
 function showAccess(){document.getElementById('v2-access-panel').innerHTML=authPanel();document.getElementById('v2-access-panel').hidden=false;document.getElementById('v2-access')?.focus();}
@@ -1013,7 +1014,7 @@ function renderReview(){
  <label class="field-label" for="review-category">Categoría</label><select id="review-category"><option value="">Elegí una categoría</option>${catalog().map(c=>`<option value="${escapeText(c)}" ${d.category===c?'selected':''}>${escapeText(c)}</option>`).join('')}</select>
  <details class="v2-new"><summary>Crear una categoría</summary><input id="review-new-category" placeholder="Nombre de la categoría" maxlength="60"><button class="v2-secondary" onclick="createFromReview()">Crear y usar</button></details>
  <label class="field-label" for="review-note">¿De qué fue?</label><textarea id="review-note" placeholder="Una nota para reconocerlo después">${escapeText(d.note||r.note||'')}</textarea>
- ${r.source==='ca'?'<label class="field-label" for="review-person">¿Quién?</label><select id="review-person"><option value="">Elegí una persona</option><option>Boris</option><option>Flor</option></select><label class="field-label" for="review-medium">Medio de pago</label><select id="review-medium"><option value="">Elegí el medio</option><option>Tarjeta débito</option><option>Transferencia</option><option>Transfer MercadoPago</option><option>Débito MercadoPago</option></select>':''}
+ ${r.source==='ca'?'<label class="field-label" for="review-person">¿Quién?</label><select id="review-person"><option value="">Elegí una persona</option><option>Boris</option><option>Flor</option></select><label class="field-label" for="review-medium">Medio de pago</label><select id="review-medium"><option value="">Elegí el medio</option>'+PAYMENT_METHODS.map(m=>'<option>'+escapeText(m)+'</option>').join('')+'</select>':''}
  <button class="v2-primary" onclick="resolveReview('${r.source==='ca'?'create':'classify'}')">${r.source==='ca'?'Cargar gasto en la app':'Guardar categoría'}</button>
  <div class="v2-actions"><button class="v2-secondary" onclick="resolveReview('defer')">Después</button><button class="v2-secondary" onclick="resolveReview('exclude')">Dejar fuera</button></div><p id="review-error" role="status" class="cat-status"></p>`;
 }
