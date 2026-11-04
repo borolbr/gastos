@@ -901,8 +901,22 @@ async function v2Call(action,payload={}){
   localStorage.setItem(v2Key,JSON.stringify(v2));return {status:'ok',version:2,...v2};
  }
  const params=await signedParams(action,payload);
- const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);
- try{const res=await fetch(APPS_SCRIPT_URL+'?'+params,{redirect:'follow',signal:controller.signal});const j=await res.json();if(!res.ok||j.status!=='ok'||j.version!==2)throw Error(j.error||'Falta activar la actualización del Sheet.');return j;}finally{clearTimeout(timer);}
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
+ let j,res;
+ try{res=await fetch(APPS_SCRIPT_URL+'?'+params,{redirect:'follow',signal:controller.signal,cache:'no-store'});j=await res.json();}
+ catch(cause){const error=Error('Se interrumpió la conexión.');error.uncertain=true;throw error;}
+ finally{clearTimeout(timer);}
+ if(!res.ok||j.status!=='ok'||j.version!==2)throw Error(j.error||'Falta activar la actualización del Sheet.');return j;
+}
+async function saveReviewChecked(payload,onChecking){
+ try{return await v2Call('review',payload);}
+ catch(error){
+  if(!error.uncertain)throw error;
+  onChecking();
+  // A lost response does not mean the write failed. Read back; never submit a second write here.
+  try{const state=await v2Call('state');if(state.reviews?.[payload.id]?.request===JSON.stringify(payload))return state;}catch(checkError){}
+  const pending=Error('No pudimos confirmar el guardado. Conservamos lo que elegiste. Podés reintentar la misma acción o actualizar para comprobarlo; no cargues este gasto de nuevo.');pending.uncertain=true;throw pending;
+ }
 }
 async function loadV2(strict=false){
  if(V2_LOCAL){v2=getLocal(v2Key,LOCAL_PREVIEW);v2Ready=true;refreshCatalog();return;}
@@ -990,6 +1004,11 @@ function candidates(r){
  const used=new Set(Object.values(v2.reviews).filter(d=>d.action==='link').map(d=>d.appId));
  return getLocal('gastos_bw',[]).map((g,i)=>({...g,_id:g.id||'row-'+i})).filter(g=>!used.has(g._id)&&g.medio!=='Efectivo'&&g.medio!=='saldo ML'&&(r.source==='tc'?g.medio==='Tarjeta crédito':g.medio!=='Tarjeta crédito')&&Math.abs(Number(g.monto)-r.amount)<=1&&Math.abs(new Date(normFecha(g.fecha))-new Date(r.date))<=4*86400000);
 }
+function candidateKey(g){return JSON.stringify([normFecha(g.fecha),g.quien,Number(g.monto),g.cat,g.medio,g.nota||'']);}
+function candidateLabel(g,matches){
+ const equal=matches.filter(m=>candidateKey(m)===candidateKey(g));
+ return g.fecha+' · '+g.quien+' · '+money(g.monto)+' · '+(g.nota||g.cat)+' · '+g.medio+(equal.length>1?' · Copia '+(equal.findIndex(m=>m._id===g._id)+1)+' de '+equal.length:'');
+}
 function unresolved(r){
  if(r.source==='tc'&&r.basis==='Resumen de septiembre revisado')return false;
  const d=v2.reviews[r.id];if(d&&['classify','create','link','exclude'].includes(d.action))return false;
@@ -999,6 +1018,14 @@ function unresolved(r){
 }
 function startReview(source,month){if(!v2Ready&&!V2_LOCAL){v2PendingReview={source,month};showAccess();return;}reviewSource=source;reviewMonth=month||catMesKey;reviewSkipped=new Set();switchTab('revision');}
 function reviewRows(){return v2.records.filter(r=>r.source===reviewSource&&r.month===reviewMonth&&unresolved(r));}
+function debitDefaults(r,decision={}){
+ const debit=r.source==='ca'&&r.kind==='expense'&&r.amount>0&&/^COMPRA\s+D[EÉ]BITO\b/i.test(r.description||'');
+ const cards=debit?(r.description.match(/\b\d{4}[Xx*•]{4,}\d{2,4}\b/g)||[]):[];
+ const card=cards.length===1?cards[0].replace(/[Xx*•]+/g,'X'):'';
+ const owner=card?v2.cardOwners?.[card]:'';
+ const knownOwner=['Boris','Flor'].includes(owner)?owner:'';
+ return {person:decision.person||knownOwner||r.person||'',medium:decision.medium||(debit?'Tarjeta débito':''),hint:!decision.person&&knownOwner?'Sugerido por la tarjeta terminada en '+card.split('X')[1]+'. Podés cambiarlo.':''};
+}
 function renderReview(){
  if(!v2Ready&&!V2_LOCAL){showAccess();return;}
  const rows=reviewRows(),all=v2.records.filter(r=>r.source===reviewSource&&r.month===reviewMonth&&r.kind==='expense'&&r.currency==='ARS'&&r.amount>0);
@@ -1008,13 +1035,13 @@ function renderReview(){
  document.getElementById('review-count').textContent=rows.length+' pendientes de '+all.length+' movimientos';
  const target=document.getElementById('review-card');
  if(!r){target.innerHTML=`<h3>${rows.length?'Dejaste '+rows.length+' para después':'Terminaste esta revisión'}</h3><p class="cat-status">${rows.length?'Siguen pendientes. Podés retomarlos cuando quieras.':'Los movimientos revisados conservan su categoría y detalle.'}</p>${rows.length?'<button class="v2-primary" onclick="reviewSkipped.clear();renderReview()">Retomar pendientes</button>':''}`;return;}
- const d=v2.reviews[r.id]||{},matches=candidates(r);
+ const d=v2.reviews[r.id]||{},matches=candidates(r),defaults=debitDefaults(r,d);
  target.innerHTML=`<p class="cat-status">${escapeText(r.date.split('-').reverse().join('/'))}${r.person?' · '+escapeText(r.person):''}</p><h2 class="review-amount">${money(r.amount)}</h2><p class="review-description">${escapeText(r.description)}</p><p class="cat-status">${escapeText(r.basis||'')}${r.suggestedCategory?' · Categoría sugerida: '+escapeText(r.suggestedCategory):''}</p>
- ${matches.length?'<label class="field-label" for="review-match">Posibles cargas en la app · confirmar</label><select id="review-match"><option value="">Elegí una coincidencia</option>'+matches.map(m=>`<option value="${escapeText(m._id)}">${escapeText(m.fecha)} · ${escapeText(m.quien)} · ${money(m.monto)} · ${escapeText(m.nota||m.cat)}</option>`).join('')+'</select><button class="v2-secondary" onclick="resolveReview(\'link\')">Ya está cargado: vincular</button>':'<p class="cat-status">No hay una coincidencia por importe y fecha. Revisá el concepto antes de cargarlo.</p>'}
+ ${matches.length?'<label class="field-label" for="review-match">Posibles cargas en la app · confirmar</label><select id="review-match"><option value="">Elegí una coincidencia</option>'+matches.map(m=>`<option value="${escapeText(m._id)}">${escapeText(candidateLabel(m,matches))}</option>`).join('')+'</select>'+(new Set(matches.map(candidateKey)).size<matches.length?'<p class="cat-status">Hay cargas con los mismos datos en la planilla. Vincular elige una sola; las otras copias quedan para revisar.</p>':'')+'<button class="v2-secondary" onclick="resolveReview(\'link\')">Ya está cargado: vincular</button>':'<p class="cat-status">No hay una coincidencia por importe y fecha. Revisá el concepto antes de cargarlo.</p>'}
  <label class="field-label" for="review-category">Categoría</label><select id="review-category"><option value="">Elegí una categoría</option>${catalog().map(c=>`<option value="${escapeText(c)}" ${d.category===c?'selected':''}>${escapeText(c)}</option>`).join('')}</select>
  <details class="v2-new"><summary>Crear una categoría</summary><input id="review-new-category" placeholder="Nombre de la categoría" maxlength="60"><button class="v2-secondary" onclick="createFromReview()">Crear y usar</button></details>
  <label class="field-label" for="review-note">¿De qué fue?</label><textarea id="review-note" placeholder="Una nota para reconocerlo después">${escapeText(d.note||r.note||'')}</textarea>
- ${r.source==='ca'?'<label class="field-label" for="review-person">¿Quién?</label><select id="review-person"><option value="">Elegí una persona</option><option>Boris</option><option>Flor</option></select><label class="field-label" for="review-medium">Medio de pago</label><select id="review-medium"><option value="">Elegí el medio</option>'+PAYMENT_METHODS.map(m=>'<option>'+escapeText(m)+'</option>').join('')+'</select>':''}
+ ${r.source==='ca'?'<label class="field-label" for="review-person">¿Quién?</label><select id="review-person"><option value="">Elegí una persona</option>'+['Boris','Flor'].map(p=>'<option'+(p===defaults.person?' selected':'')+'>'+p+'</option>').join('')+'</select>'+(defaults.hint?'<p class="cat-status">'+escapeText(defaults.hint)+'</p>':'')+'<label class="field-label" for="review-medium">Medio de pago</label><select id="review-medium"><option value="">Elegí el medio</option>'+PAYMENT_METHODS.map(m=>'<option'+(m===defaults.medium?' selected':'')+'>'+escapeText(m)+'</option>').join('')+'</select>':''}
  <button class="v2-primary" onclick="resolveReview('${r.source==='ca'?'create':'classify'}')">${r.source==='ca'?'Cargar gasto en la app':'Guardar categoría'}</button>
  <div class="v2-actions"><button class="v2-secondary" onclick="resolveReview('defer')">Después</button><button class="v2-secondary" onclick="resolveReview('exclude')">Dejar fuera</button></div><p id="review-error" role="status" class="cat-status"></p>`;
 }
@@ -1028,9 +1055,9 @@ async function resolveReview(action){
  if(action==='create'&&(!person||!medium)){e.textContent='Elegí quién y el medio de pago.';return;}
  if(action==='link'&&!appId){e.textContent='Elegí qué carga corresponde a este movimiento.';return;}
  if(action==='exclude'&&!note){e.textContent='Anotá por qué lo dejamos fuera.';return;}
- reviewBusy=true;targetDisable(true);
- try{const j=await v2Call('review',{id:r.id,action,category,note,appId,person,medium,expectedRevision:d?.revision||0});v2=j;if(j.rows)setLocal('gastos_bw',j.rows);if(action==='defer')reviewSkipped.add(r.id);renderReview();}
- catch(err){e.textContent='No se guardó: '+err.message;}finally{reviewBusy=false;targetDisable(false);}
+ reviewBusy=true;targetDisable(true);e.textContent='Guardando…';
+ try{const j=await saveReviewChecked({id:r.id,action,category,note,appId,person,medium,expectedRevision:d?.revision||0},()=>{e.textContent='La respuesta está demorando. Comprobando si ya se guardó…';});v2=j;if(j.rows)setLocal('gastos_bw',j.rows);if(action==='defer')reviewSkipped.add(r.id);renderReview();}
+ catch(err){e.textContent=(err.uncertain?'':'No se guardó: ')+err.message;}finally{reviewBusy=false;targetDisable(false);}
 }
 function targetDisable(disabled){document.querySelectorAll('#review-card button').forEach(b=>b.disabled=disabled);}
 function exportReview(){if(!v2Ready)return;const blob=new Blob([JSON.stringify(v2,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='revision-gastos-williams.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
