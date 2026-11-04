@@ -196,6 +196,8 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
 .tabbar{overflow-x:auto;position:sticky;top:65px;z-index:9}.tab{min-width:77px;font-size:11px;color:var(--text2)}
 .v2-heading{font-size:15px;margin:12px 0;line-height:1.45}.v2-primary,.v2-secondary{font:inherit;font-size:14px;border-radius:8px;padding:12px;cursor:pointer;width:100%;margin-top:9px}.v2-primary{background:var(--accent);color:#fff;border:0}.v2-secondary{background:var(--surface);color:var(--text);border:1px solid var(--border-strong)}.v2-actions{display:flex;gap:8px}.review-amount{font-size:32px;margin:12px 0}.review-description{font-size:16px;line-height:1.5;overflow-wrap:anywhere}.v2-new{margin:12px 0}.v2-new summary{cursor:pointer;color:var(--accent);font-size:14px}.v2-new input,#review-card select,#review-card textarea,#tc-mes,#bank-mes{width:100%;padding:12px;margin:6px 0 12px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:14px}#review-card textarea{min-height:70px}.preview-note{background:#fff3e0;color:#754000;padding:12px;font-size:12px;line-height:1.5}.category-amount{white-space:nowrap;font-size:13px}button:disabled{opacity:.5;cursor:wait}
 .category-detail .hist-item.installment-final{background:var(--green-bg);margin:5px -6px;padding:12px 6px;border-radius:8px;border-bottom-color:transparent}.installment-final .hist-desc,.installment-final .hist-meta,.installment-final .hist-monto{color:var(--green)}.installment-final-label{display:inline-block;margin-top:5px;font-size:10px;font-weight:700;color:var(--green);border:1px solid var(--green-border);border-radius:12px;padding:2px 7px}
+
+#review-card.review-deferred{background:#fff7df;border:1px solid #d7a737}.review-later-label{display:inline-block;background:#fff0b8;color:#785000;border:1px solid #d7a737;border-radius:7px;padding:5px 8px;font-size:12px;font-weight:600;margin-top:5px}.category-pending>summary{background:#fff7df}.bank-pending-row{background:#fffbef}.category-detail .bank-pending-row{padding:12px 6px;margin:0 -6px}#cat-breakdown{font-weight:600}.cat-total{flex-wrap:wrap}.category-detail .v2-secondary{font-size:12px;padding:8px}
 </style>
 </head>
 <body>
@@ -395,8 +397,8 @@ body{background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI
           <button type="button" aria-label="Mes siguiente" onclick="cambiarMesCategorias(1)">›</button>
         </div>
       </div>
-      <div class="cat-total"><span>Gastos de la app · sin tarjeta de crédito</span><strong id="cat-total">$0</strong></div>
-      <p id="cat-status" role="status" class="cat-status"></p>
+      <div class="cat-total"><span id="cat-total-label">Total del mes</span><strong id="cat-total">$0</strong></div>
+      <p id="cat-breakdown" class="cat-status"></p><p id="cat-reconciliation" class="cat-status"></p><p id="cat-status" role="status" class="cat-status"></p>
     </div>
     <p class="cat-status">Incluye efectivo, débito, transferencias y saldo ML. Los consumos de tarjeta se consultan aparte.</p>
     <div id="cat-list"></div><details class="card" ontoggle="if(this.open)renderUnmatchedApp()"><summary>Gastos cargados sin coincidencia en los extractos</summary><div id="unmatched-app"></div></details>
@@ -854,7 +856,7 @@ async function renderCategorias(){
 
 // Historiales y revisión compartida. Los datos bancarios nunca se incluyen en el HTML público.
 let v2={records:[],statements:[],categories:[],reviews:{}};
-let v2Ready=false, reviewSource='ca', reviewMonth='2026-10', reviewSkipped=new Set(), reviewCurrent='', reviewBusy=false;
+let v2Ready=false, reviewSource='ca', reviewMonth='2026-10', reviewSkipped=new Set(), reviewCurrent='', reviewBusy=false, reviewFocus='';
 const V2_LOCAL=typeof LOCAL_PREVIEW!=='undefined';
 const v2Key='gastos_williams_revision_v2';
 const PAYMENT_METHODS=['Efectivo','Transfer MercadoPago','Débito MercadoPago','Tarjeta débito','Tarjeta crédito','Transferencia','saldo ML','servicio home banking'];
@@ -863,7 +865,7 @@ function authPanel(){return `<div class="card"><h3 class="v2-heading">Abrir res�
 function showAccess(){document.getElementById('v2-access-panel').innerHTML=authPanel();document.getElementById('v2-access-panel').hidden=false;document.getElementById('v2-access')?.focus();}
 async function unlockV2(){
  const input=document.getElementById('v2-access'),button=document.getElementById('v2-unlock');v2Access=input.value.trim();button.disabled=true;
- try{await loadV2(true);if(!v2Ready)throw Error(v2LoadError);setLocal('gw_access_code',v2Access);document.getElementById('v2-access-panel').hidden=true;renderTarjeta();renderCuotas();renderBank();if(v2PendingReview){const p=v2PendingReview;v2PendingReview=null;startReview(p.source,p.month);}if(document.getElementById('view-revision').classList.contains('active'))renderReview();}
+ try{await loadV2(true);if(!v2Ready)throw Error(v2LoadError);setLocal('gw_access_code',v2Access);document.getElementById('v2-access-panel').hidden=true;renderTarjeta();renderCuotas();renderBank();if(v2PendingReview){const p=v2PendingReview;v2PendingReview=null;startReview(p.source,p.month);}if(document.getElementById('view-revision').classList.contains('active'))renderReview();if(document.getElementById('view-categorias').classList.contains('active'))renderCategorias();}
  catch(e){document.getElementById('v2-access-error').textContent=e.message;}finally{button.disabled=false;}
 }
 function lockV2(){
@@ -1016,8 +1018,9 @@ function unresolved(r){
  if(r.source==='tc')return !r.category||['Sin categoría','No identificado'].includes(r.category);
  return true;
 }
-function startReview(source,month){if(!v2Ready&&!V2_LOCAL){v2PendingReview={source,month};showAccess();return;}reviewSource=source;reviewMonth=month||catMesKey;reviewSkipped=new Set();switchTab('revision');}
+function startReview(source,month){if(!v2Ready&&!V2_LOCAL){v2PendingReview={source,month};showAccess();return;}reviewSource=source;reviewMonth=month||catMesKey;reviewSkipped=new Set();reviewFocus='';switchTab('revision');}
 function reviewRows(){return v2.records.filter(r=>r.source===reviewSource&&r.month===reviewMonth&&unresolved(r));}
+function reviewOrder(rows){return [...rows].sort((a,b)=>Number(b.amount)-Number(a.amount)||b.date.localeCompare(a.date)||a.id.localeCompare(b.id));}
 function debitDefaults(r,decision={}){
  const debit=r.source==='ca'&&r.kind==='expense'&&r.amount>0&&/^COMPRA\s+D[EÉ]BITO\b/i.test(r.description||'');
  const cards=debit?(r.description.match(/\b\d{4}[Xx*•]{4,}\d{2,4}\b/g)||[]):[];
@@ -1029,14 +1032,15 @@ function debitDefaults(r,decision={}){
 function renderReview(){
  if(!v2Ready&&!V2_LOCAL){showAccess();return;}
  const rows=reviewRows(),all=v2.records.filter(r=>r.source===reviewSource&&r.month===reviewMonth&&r.kind==='expense'&&r.currency==='ARS'&&r.amount>0);
- const sorted=[...rows].sort((a,b)=>Number(v2.reviews[a.id]?.action==='defer')-Number(v2.reviews[b.id]?.action==='defer'));
- const r=sorted.find(r=>!reviewSkipped.has(r.id));reviewCurrent=r?.id||'';
+ const sorted=reviewOrder(rows);
+ const r=sorted.find(r=>r.id===reviewFocus)||sorted.find(r=>!reviewSkipped.has(r.id));reviewFocus='';reviewCurrent=r?.id||'';
  document.getElementById('review-heading').textContent=(reviewSource==='ca'?'Caja de ahorro':'Tarjeta')+' · '+monthLabel(reviewMonth);
- document.getElementById('review-count').textContent=rows.length+' pendientes de '+all.length+' movimientos';
+ document.getElementById('review-count').textContent=rows.length+' pendientes de '+all.length+' movimientos · De mayor a menor importe';
  const target=document.getElementById('review-card');
+ target.classList.toggle('review-deferred',!!r&&v2.reviews[r.id]?.action==='defer');
  if(!r){target.innerHTML=`<h3>${rows.length?'Dejaste '+rows.length+' para después':'Terminaste esta revisión'}</h3><p class="cat-status">${rows.length?'Siguen pendientes. Podés retomarlos cuando quieras.':'Los movimientos revisados conservan su categoría y detalle.'}</p>${rows.length?'<button class="v2-primary" onclick="reviewSkipped.clear();renderReview()">Retomar pendientes</button>':''}`;return;}
  const d=v2.reviews[r.id]||{},matches=candidates(r),defaults=debitDefaults(r,d);
- target.innerHTML=`<p class="cat-status">${escapeText(r.date.split('-').reverse().join('/'))}${r.person?' · '+escapeText(r.person):''}</p><h2 class="review-amount">${money(r.amount)}</h2><p class="review-description">${escapeText(r.description)}</p><p class="cat-status">${escapeText(r.basis||'')}${r.suggestedCategory?' · Categoría sugerida: '+escapeText(r.suggestedCategory):''}</p>
+ target.innerHTML=`${d.action==='defer'?'<p class="review-later-label">Dejado para después</p><p class="cat-status">Este gasto sigue pendiente. Conservamos los datos que habías elegido.</p>':''}<p class="cat-status">${escapeText(r.date.split('-').reverse().join('/'))}${r.person?' · '+escapeText(r.person):''}</p><h2 class="review-amount">${money(r.amount)}</h2><p class="review-description">${escapeText(r.description)}</p><p class="cat-status">${escapeText(r.basis||'')}${r.suggestedCategory?' · Categoría sugerida: '+escapeText(r.suggestedCategory):''}</p>
  ${matches.length?'<label class="field-label" for="review-match">Posibles cargas en la app · confirmar</label><select id="review-match"><option value="">Elegí una coincidencia</option>'+matches.map(m=>`<option value="${escapeText(m._id)}">${escapeText(candidateLabel(m,matches))}</option>`).join('')+'</select>'+(new Set(matches.map(candidateKey)).size<matches.length?'<p class="cat-status">Hay cargas con los mismos datos en la planilla. Vincular elige una sola; las otras copias quedan para revisar.</p>':'')+'<button class="v2-secondary" onclick="resolveReview(\'link\')">Ya está cargado: vincular</button>':'<p class="cat-status">No hay una coincidencia por importe y fecha. Revisá el concepto antes de cargarlo.</p>'}
  <label class="field-label" for="review-category">Categoría</label><select id="review-category"><option value="">Elegí una categoría</option>${catalog().map(c=>`<option value="${escapeText(c)}" ${d.category===c?'selected':''}>${escapeText(c)}</option>`).join('')}</select>
  <details class="v2-new"><summary>Crear una categoría</summary><input id="review-new-category" placeholder="Nombre de la categoría" maxlength="60"><button class="v2-secondary" onclick="createFromReview()">Crear y usar</button></details>
@@ -1081,6 +1085,68 @@ async function refreshShared(){
  const msg=document.getElementById(document.getElementById('view-cuotas').classList.contains('active')?'cuotas-refresh-status':'v2-refresh-status');msg.textContent='Actualizando…';
  try{await loadV2(true);if(!v2Ready){showAccess();throw Error('Ingresá el código para actualizar.');}renderTarjeta();renderCuotas();renderBank();if(document.getElementById('view-revision').classList.contains('active'))renderReview();msg.textContent='Actualizado.';}
  catch(e){msg.textContent=e.message;}
+}
+
+// One monthly ledger: bank movements plus app-only expenses. Proposed matches affect
+// this provisional display only; only the review action saves a confirmed link.
+function bankMonthlyLedger(data,apps,month){
+ const cents=n=>Math.round(Number(n)*100),reviews=data.reviews||{};
+ const app=apps.map((g,i)=>({...g,_id:g.id||'row-'+i,fecha:normFecha(g.fecha)}));
+ const byId=new Map(app.map(g=>[g._id,g])),consumed=new Set();
+ const bank=data.records.filter(r=>r.source==='ca'&&r.kind==='expense'&&r.currency==='ARS'&&r.amount>0&&reviews[r.id]?.action!=='exclude');
+ const explicit=new Map();
+ bank.forEach(r=>{
+  const d=reviews[r.id],id=d?.action==='link'?d.appId:d?.action==='create'?'review-'+r.id:'';
+  if(id){explicit.set(r.id,id);consumed.add(id);}
+ });
+ // Reserve app rows explicitly linked elsewhere before proposing any bank matches.
+ Object.values(reviews).filter(d=>d.action==='link'&&d.appId).forEach(d=>consumed.add(d.appId));
+ const available=app.filter(g=>!consumed.has(g._id)&&!['Efectivo','saldo ML','Tarjeta crédito'].includes(g.medio));
+ const pending=bank.filter(r=>!explicit.has(r.id));
+ const choices=new Map(pending.map(r=>[r.id,available.filter(g=>Math.abs(cents(g.monto)-cents(r.amount))<=100&&Math.abs(new Date(g.fecha)-new Date(r.date))<=4*86400000).sort((a,b)=>Math.abs(cents(a.monto)-cents(r.amount))-Math.abs(cents(b.monto)-cents(r.amount))||Math.abs(new Date(a.fecha)-new Date(r.date))-Math.abs(new Date(b.fecha)-new Date(r.date))||a._id.localeCompare(b._id))]));
+ const occupied=new Map(),proposals=new Map();
+ // A one-to-one assignment prevents reusing a single app expense for two debits.
+ function assign(id,seen){
+  for(const g of choices.get(id)||[]){
+   if(seen.has(g._id))continue;seen.add(g._id);
+   const other=occupied.get(g._id);
+   if(!other||assign(other,seen)){occupied.set(g._id,id);proposals.set(id,g._id);return true;}
+  }
+  return false;
+ }
+ pending.slice().sort((a,b)=>choices.get(a.id).length-choices.get(b.id).length||a.date.localeCompare(b.date)||a.id.localeCompare(b.id)).forEach(r=>assign(r.id,new Set()));
+ proposals.forEach(id=>consumed.add(id));
+ const entries=bank.map(r=>{
+  const d=reviews[r.id]||{},confirmed=explicit.has(r.id),g=byId.get(explicit.get(r.id)||proposals.get(r.id)),suggestion=debitDefaults(r,d);
+  return {id:r.id,month:r.month,date:r.date,cents:cents(r.amount),category:confirmed?(g?.cat||d.category||'Sin categoría'):'Sin categoría',description:confirmed?(d.note||g?.nota||r.description):(d.note||r.description),person:g?.quien||d.person||suggestion.person||'Sin asignar',medium:g?.medio||d.medium||suggestion.medium||'',pending:!confirmed,deferred:d.action==='defer',proposal:!confirmed&&g?{id:g._id,note:g.nota||g.cat,date:g.fecha,amount:g.monto,category:g.cat}:null,bankDescription:r.description};
+ });
+ app.filter(g=>!consumed.has(g._id)&&g.medio!=='Tarjeta crédito'&&Number.isFinite(Number(g.monto))).forEach(g=>entries.push({id:g._id,month:g.fecha.slice(0,7),date:g.fecha,cents:cents(g.monto),category:String(g.cat||'').trim()||'Sin categoría',description:g.nota||'Sin nota',person:g.quien||'Sin asignar',medium:g.medio||'',pending:false}));
+ const rows=entries.filter(r=>r.month===month),groups=new Map();
+ rows.forEach(r=>{r.category=String(r.category||'').trim()||'Sin categoría';if(!groups.has(r.category))groups.set(r.category,{cat:r.category,cents:0,rows:[]});const group=groups.get(r.category);group.cents+=r.cents;group.rows.push(r);});
+ if(!groups.has('Sin categoría'))groups.set('Sin categoría',{cat:'Sin categoría',cents:0,rows:[]});
+ return {rows,groups:[...groups.values()].sort((a,b)=>Number(b.cat==='Sin categoría')-Number(a.cat==='Sin categoría')||b.cents-a.cents),total:rows.reduce((s,r)=>s+r.cents,0),pendingTotal:rows.filter(r=>r.pending).reduce((s,r)=>s+r.cents,0),pendingCount:rows.filter(r=>r.pending).length,proposalCount:rows.filter(r=>r.proposal).length,hasStatement:data.records.some(r=>r.source==='ca'&&r.month===month)};
+}
+function drawBankHistory(data,apps,month){
+ const report=bankMonthlyLedger(data,apps,month),list=document.getElementById('cat-list');
+ const opened=new Set([...list.querySelectorAll('details[open]')].map(el=>el.dataset.category));
+ document.getElementById('cat-total-label').textContent=report.pendingCount?'Total del mes · provisorio':'Total del mes';
+ document.getElementById('cat-total').textContent=money(report.total/100);
+ document.getElementById('cat-breakdown').textContent='Confirmados: '+money((report.total-report.pendingTotal)/100)+' · Pendientes del extracto: '+money(report.pendingTotal/100)+' ('+report.pendingCount+').';
+ document.getElementById('cat-reconciliation').textContent=(report.hasStatement?'Incluye gastos cargados y débitos pendientes. Los ingresos, pagos de tarjeta y movimientos dejados afuera no se suman.':'Todavía no hay extracto importado para este mes: el total incluye los gastos de la app.')+(report.proposalCount?' Hay '+report.proposalCount+' posibles coincidencias con la app: se cuentan una sola vez, en Sin categoría, hasta que las confirmes.':'');
+ list.innerHTML=report.groups.map(group=>`<details class="category-group${group.cat==='Sin categoría'?' category-pending':''}" data-category="${escapeText(group.cat)}" ${opened.has(group.cat)?'open':''}><summary><span class="category-name"><span class="category-label"><i class="ti ${CAT_ICONS[group.cat]||'ti-tag'}" aria-hidden="true"></i><span>${escapeText(group.cat)}</span></span><small>${group.rows.length} ${group.rows.length===1?'gasto':'gastos'}</small></span><span class="category-amount">${money(group.cents/100)}</span></summary><div class="category-detail">${group.rows.length?group.rows.sort((a,b)=>b.cents-a.cents||b.date.localeCompare(a.date)).map(r=>`<div class="hist-item${r.pending?' bank-pending-row':''}"><div class="hist-info"><div class="hist-desc">${escapeText(r.description)}</div>${r.pending?'<span class="review-later-label">'+(r.deferred?'Dejado para después':'Pendiente de revisar')+'</span>':''}<div class="hist-meta">${escapeText(r.date.split('-').reverse().join('/'))} · ${escapeText(r.person)}${r.medium?'<br>'+escapeText(r.medium):''}${r.proposal?'<br>Posible carga en la app: '+escapeText(r.proposal.note)+' · '+escapeText(r.proposal.date)+' · '+money(r.proposal.amount)+'. Se cuenta una sola vez; falta confirmar la vinculación.':''}</div>${r.pending?`<button class="v2-secondary" onclick="openBankPending('${escapeText(r.id)}')">Revisar este gasto</button>`:''}</div><div class="hist-monto">${money(r.cents/100)}</div></div>`).join(''):'<p class="cat-status">No hay gastos sin categoría para este mes.</p>'}</div></details>`).join('');
+}
+async function renderCategorias(){
+ const request=++catRequest,month=catMesKey,status=document.getElementById('cat-status');document.getElementById('cat-mes').value=month;
+ if(!v2Ready&&!V2_LOCAL){document.getElementById('cat-total').textContent='—';document.getElementById('cat-list').innerHTML='';document.getElementById('cat-breakdown').textContent='';document.getElementById('cat-reconciliation').textContent='';}
+ if(!v2Access&&!V2_LOCAL){status.textContent='Ingresá el código para ver el total con los pendientes del extracto.';showAccess();return;}
+ if(v2Ready)drawBankHistory(v2,V2_LOCAL?getLocal('gastos_bw',[]):v2.rows||[],month);
+ status.textContent='Actualizando gastos y pendientes…';
+ try{await loadV2(true);if(request!==catRequest)return;if(!v2Ready)throw Error('Ingresá el código para continuar.');document.getElementById('v2-access-panel').hidden=true;drawBankHistory(v2,V2_LOCAL?getLocal('gastos_bw',[]):v2.rows||[],month);status.textContent='Actualizado. Todos los importes de las categorías suman el total de arriba.';}
+ catch(error){if(request!==catRequest)return;status.textContent='No se pudo actualizar: '+error.message+' Los datos que ya se mostraban pueden estar desactualizados.';}
+}
+function openBankPending(id){
+ const r=v2.records.find(r=>r.id===id&&r.source==='ca'&&unresolved(r));if(!r)return;
+ reviewSource='ca';reviewMonth=r.month;reviewSkipped=new Set();reviewFocus=id;switchTab('revision');window.scrollTo(0,0);
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
